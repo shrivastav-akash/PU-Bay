@@ -283,7 +283,7 @@ export const sendConnectionRequest = async (req, res) => {
 
 export const getMyConnectionsRequest = async (req, res) => {
   try {
-    const { token } = req.body;
+    const token = req.query.token || req.body.token;
     const user = await User.findOne({ token });
     if (!user) {
       res.status(404).json({ success: false, message: "user does not exist" });
@@ -304,7 +304,7 @@ export const getMyConnectionsRequest = async (req, res) => {
 
 export const getUserGotConnectionRequest = async (req, res) => {
   try {
-    const { token } = req.body;
+    const token = req.query.token || req.body.token;
     const user = await User.findOne({ token });
     if (!user) {
       res.status(404).json({ success: false, message: "user does not exist" });

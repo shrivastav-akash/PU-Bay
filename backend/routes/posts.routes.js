@@ -26,7 +26,7 @@ router.route("/post").post(upload.single("media"), createPost);
 router.route("/get_all_posts").get(getAllPosts);
 router.route("/delete_post").post(deletePost);
 router.route("/comment_post").post(commentPost);
-router.route("get_comment").get(get_comment_by_post);
+router.route("/get_comment").get(get_comment_by_post);
 router.route("/delete_comment_of_user").post(delete_comment_of_user);
 router.route("/increment_likes").post(increment_likes);
 

@@ -1,5 +1,6 @@
 import Post from "../models/posts.model.js";
 import User from "../models/user.model.js";
+import Comment from "../models/comments.model.js";
 
 export const createPost = async (req, res) => {
   try {
@@ -105,7 +106,7 @@ export const commentPost = async (req, res) => {
 
 export const get_comment_by_post = async (req, res) => {
   try {
-    const { postId } = req.body;
+    const postId = req.query.postId || req.body.postId;
     const comments = await Comment.find({ postId }).populate(
       "userId",
       "name username profilePicture",
