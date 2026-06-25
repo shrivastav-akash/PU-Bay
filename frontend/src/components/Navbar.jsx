@@ -1,110 +1,122 @@
-import { Sun, Moon, LogOut, PlusSquare, User, Sparkles } from 'lucide-react';
-import { API_BASE_URL } from '../config';
+import { Sun, Moon, LogOut, Plus } from 'lucide-react';
+import Avatar from './Avatar';
 
-export default function Navbar({ 
-  user, 
-  theme, 
-  toggleTheme, 
-  onLogout, 
-  onProfileClick, 
+export default function Navbar({
+  user,
+  theme,
+  loggedIn,
+  toggleTheme,
+  onLogout,
+  onProfileClick,
   onCreatePostClick,
   onLogoClick,
-  onLoginClick
+  onSignInClick,
 }) {
-  const avatarUrl = user?.profilePicture && user.profilePicture !== 'default.jpg'
-    ? `${API_BASE_URL}/${user.profilePicture}`
-    : null;
+  const isDark = theme === 'dark';
+  const firstName = user?.name ? user.name.split(' ')[0] : '';
 
   return (
-    <nav className="navbar">
-      <div className="logo-container" onClick={onLogoClick || (() => window.location.reload())}>
-        <Sparkles size={24} style={{ fill: 'currentColor' }} />
-        <span>PU-Bay</span>
+    <nav
+      style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 200,
+        height: 66,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 clamp(16px,4vw,40px)',
+        background: 'color-mix(in srgb, var(--paper) 84%, transparent)',
+        backdropFilter: 'blur(14px)',
+        WebkitBackdropFilter: 'blur(14px)',
+        borderBottom: '1.5px solid var(--border)',
+      }}
+    >
+      <div onClick={onLogoClick} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+        <div
+          style={{
+            width: 34, height: 34, borderRadius: 9, background: 'var(--accent)',
+            border: '1.5px solid var(--line)', boxShadow: '2px 2px 0 var(--shadow)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'var(--accent-ink)', fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 18,
+          }}
+        >
+          P
+        </div>
+        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 22, letterSpacing: '-0.03em', color: 'var(--ink)' }}>
+          PU<span style={{ color: 'var(--accent)' }}>·</span>Bay
+        </span>
       </div>
 
-      <div className="nav-actions">
-        {user && (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+        {loggedIn && (
           <>
-            <button 
-              className="btn btn-secondary" 
+            <button
               onClick={onCreatePostClick}
-              style={{ padding: '0.5rem 0.75rem' }}
-              title="Create Post"
+              className="pu-press"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, background: 'var(--ink)', color: 'var(--paper)',
+                border: '1.5px solid var(--line)', borderRadius: 10, padding: '8px 13px', fontWeight: 700,
+                fontSize: 13.5, cursor: 'pointer', boxShadow: '2px 2px 0 var(--shadow)',
+              }}
             >
-              <PlusSquare size={20} />
-              <span style={{ display: 'none' }} className="desktop-only">Post</span>
+              <Plus size={15} /><span>Post</span>
             </button>
-
-            <div className="profile-greeting" onClick={onProfileClick}>
-              {avatarUrl ? (
-                <img 
-                  src={avatarUrl} 
-                  alt={user.name} 
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '50%',
-                    objectFit: 'cover',
-                    border: '1.5px solid var(--accent-color)'
-                  }} 
-                />
-              ) : (
-                <div style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '50%',
-                  backgroundColor: 'var(--input-bg)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: '1.5px solid var(--accent-color)'
-                }}>
-                  <User size={16} />
-                </div>
-              )}
-              <span className="desktop-only" style={{ fontWeight: 600 }}>O hi, {user.name.split(' ')[0]}</span>
+            <div
+              onClick={onProfileClick}
+              className="pu-bd"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '4px 10px 4px 4px',
+                border: '1.5px solid var(--border)', borderRadius: 999, background: 'var(--card)',
+              }}
+            >
+              <Avatar user={user} size={30} />
+              <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--ink)' }}>{firstName}</span>
             </div>
           </>
         )}
 
-        {!user && onLoginClick && (
-          <button 
-            className="btn btn-primary" 
-            onClick={onLoginClick}
-            style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+        {!loggedIn && (
+          <button
+            onClick={onSignInClick}
+            className="pu-press"
+            style={{
+              background: 'var(--accent)', color: 'var(--accent-ink)', border: '1.5px solid var(--line)',
+              borderRadius: 10, padding: '9px 16px', fontWeight: 800, fontSize: 13.5, cursor: 'pointer',
+              boxShadow: '2px 2px 0 var(--shadow)',
+            }}
           >
-            Sign In
+            Sign in
           </button>
         )}
 
-        <button 
-          className="btn btn-secondary" 
+        <button
           onClick={toggleTheme}
-          style={{ borderRadius: '50%', width: '40px', height: '40px', padding: 0 }}
-          title={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+          title="Toggle theme"
+          className="pu-bd"
+          style={{
+            width: 38, height: 38, borderRadius: 10, border: '1.5px solid var(--border)', background: 'var(--card)',
+            color: 'var(--ink)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
         >
-          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          {isDark ? <Sun size={17} /> : <Moon size={17} />}
         </button>
 
-        {user && (
-          <button 
-            className="btn btn-secondary" 
+        {loggedIn && (
+          <button
             onClick={onLogout}
-            style={{ borderRadius: '50%', width: '40px', height: '40px', padding: 0, color: 'var(--danger-color)' }}
-            title="Log Out"
+            title="Log out"
+            className="pu-bd-danger"
+            style={{
+              width: 38, height: 38, borderRadius: 10, border: '1.5px solid var(--border)', background: 'var(--card)',
+              color: 'var(--danger)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'border-color .15s ease',
+            }}
           >
-            <LogOut size={18} />
+            <LogOut size={17} />
           </button>
         )}
       </div>
-
-      <style>{`
-        @media (min-width: 769px) {
-          .desktop-only {
-            display: inline !important;
-          }
-        }
-      `}</style>
     </nav>
   );
 }

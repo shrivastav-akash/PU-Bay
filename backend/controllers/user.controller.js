@@ -4,6 +4,7 @@ import ConnectionRequest from "../models/connections.model.js";
 import Connection from "../models/connections.model.js";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
+import jwt from "jsonwebtoken";
 import PDFDocument from "pdfkit";
 import fs from "fs";
 
@@ -91,8 +92,9 @@ export const login = async (req, res) => {
       res.status(401).json({ success: false, message: "incorrect password" });
       return;
     }
-    const token = crypto.randomBytes(32).toString("hex");
-    await User.updateOne({ _id: user._id }, { token });
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "7d",
+    });
     res.status(200).json({
       success: true,
       data: { message: "login successful", token: token },
@@ -106,9 +108,8 @@ export const login = async (req, res) => {
 };
 
 export const uploadProfilePicture = async (req, res) => {
-  const { token } = req.body;
   try {
-    const user = await User.findOne({ token });
+    const user = await User.findById(req.userId);
     if (!user) {
       res.status(404).json({ success: false, message: "user does not exist" });
       return;
@@ -129,8 +130,8 @@ export const uploadProfilePicture = async (req, res) => {
 
 export const updateUserProfile = async (req, res) => {
   try {
-    const { token, ...newUserData } = req.body;
-    const user = await User.findOne({ token });
+    const newUserData = req.body;
+    const user = await User.findById(req.userId);
     if (!user) {
       res.status(404).json({ success: false, message: "user does not exist" });
       return;
@@ -161,8 +162,7 @@ export const updateUserProfile = async (req, res) => {
 
 export const getUserAndProfile = async (req, res) => {
   try {
-    const { token } = req.query;
-    const user = await User.findOne({ token });
+    const user = await User.findById(req.userId);
     if (!user) {
       res.status(404).json({ success: false, message: "user does not exist" });
       return;
@@ -182,8 +182,8 @@ export const getUserAndProfile = async (req, res) => {
 
 export const updateProfileData = async (req, res) => {
   try {
-    const { token, ...newProfileData } = req.body;
-    const user = await User.findOne({ token });
+    const newProfileData = req.body;
+    const user = await User.findById(req.userId);
     if (!user) {
       res.status(404).json({ success: false, message: "user does not exist" });
       return;
@@ -242,13 +242,8 @@ export const downloadProfile = async (req, res) => {
 
 export const sendConnectionRequest = async (req, res) => {
   try {
-    const { token, receiverId } = req.body;
-    const user = await User.findOne({ token });
-    if (!user) {
-      res.status(404).json({ success: false, message: "user does not exist" });
-      return;
-    }
-    const receiver = await User.findById({ _id: receiverId });
+    const { receiverId } = req.body;
+    const receiver = await User.findById(receiverId);
     if (!receiver) {
       res
         .status(404)
@@ -256,7 +251,7 @@ export const sendConnectionRequest = async (req, res) => {
       return;
     }
     const existingConnection = await Connection.findOne({
-      userId: user._id,
+      userId: req.userId,
       connectionId: receiver._id,
     });
     if (existingConnection) {
@@ -266,7 +261,7 @@ export const sendConnectionRequest = async (req, res) => {
       return;
     }
     const connection = new ConnectionRequest({
-      userId: user._id,
+      userId: req.userId,
       connectionId: receiver._id,
     });
     await connection.save();
@@ -283,13 +278,7 @@ export const sendConnectionRequest = async (req, res) => {
 
 export const getMyConnectionsRequest = async (req, res) => {
   try {
-    const token = req.query.token || req.body.token;
-    const user = await User.findOne({ token });
-    if (!user) {
-      res.status(404).json({ success: false, message: "user does not exist" });
-      return;
-    }
-    const connections = await Connection.find({ userId: user._id }).populate(
+    const connections = await Connection.find({ userId: req.userId }).populate(
       "connectionId",
       "name username email profilePicture",
     );
@@ -304,14 +293,8 @@ export const getMyConnectionsRequest = async (req, res) => {
 
 export const getUserGotConnectionRequest = async (req, res) => {
   try {
-    const token = req.query.token || req.body.token;
-    const user = await User.findOne({ token });
-    if (!user) {
-      res.status(404).json({ success: false, message: "user does not exist" });
-      return;
-    }
     const connectionRequest = await ConnectionRequest.find({
-      connectionId: user._id,
+      connectionId: req.userId,
     }).populate("userId", "name username email profilePicture");
     res.status(200).json({ success: true, data: connectionRequest });
     return;
@@ -324,17 +307,17 @@ export const getUserGotConnectionRequest = async (req, res) => {
 
 export const acceptConnectionRequest = async (req, res) => {
   try {
-    const { token, connectionId, action_type } = req.body;
-    const user = await User.findOne({ token });
-    if (!user) {
-      res.status(404).json({ success: false, message: "user does not exist" });
-      return;
-    }
+    const { connectionId, action_type } = req.body;
     const connection = await ConnectionRequest.findOne({ _id: connectionId });
     if (!connection) {
       res
         .status(404)
         .json({ success: false, message: "connection request does not exist" });
+      return;
+    }
+    // Only the recipient of the request may accept or reject it.
+    if (connection.connectionId.toString() !== req.userId) {
+      res.status(403).json({ success: false, message: "unauthorized" });
       return;
     }
 

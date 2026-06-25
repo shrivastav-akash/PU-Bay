@@ -15,5 +15,8 @@ const CommentSchema = new mongoose.Schema({
   },
 });
 
+// Comments are always fetched by post.
+CommentSchema.index({ postId: 1 });
+
 const Comment = mongoose.model("Comment", CommentSchema);
 export default Comment;

@@ -1,567 +1,283 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect, useCallback } from 'react';
-import { API_BASE_URL } from '../config';
-import { Heart, MessageCircle, Share2, Trash2, Send, UserPlus, Check, Clock, User } from 'lucide-react';
+import { API_BASE_URL, authHeaders } from '../config';
+import { Heart, MessageCircle, Share2, Send, X, Check, Clock, Plus, Trash2 } from 'lucide-react';
+import Avatar from './Avatar';
 
-export default function PostCard({ 
-  post, 
-  token, 
-  currentUser, 
-  onPostDeleted, 
-  sentRequests, 
-  receivedRequests, 
-  allProfiles, 
+const VIDEO_TYPES = ['mp4', 'mov', 'avi', 'webm'];
+const MAX_BODY = 210;
+
+export default function PostCard({
+  post,
+  token,
+  currentUser,
+  sentRequests = [],
+  receivedRequests = [],
+  allProfiles = [],
   onConnectionUpdated,
-  swipeDirection = 'right',
   onViewProfile,
-  onPostLiked
+  liked = false,
+  onLike,
+  onSkip,
+  onHeart,
+  onShare,
+  onDeletePost,
+  likeStampOpacity = 0,
+  skipStampOpacity = 0,
 }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [likesCount, setLikesCount] = useState(post.likes || 0);
-  const [hasLiked, setHasLiked] = useState(false);
-  const [isRequesting, setIsRequesting] = useState(false);
-  
-  // Comments state
+  const [showFull, setShowFull] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState([]);
-  const [newComment, setNewComment] = useState('');
-  const [commentsLoading, setCommentsLoading] = useState(false);
-  const [addCommentLoading, setAddCommentLoading] = useState(false);
+  const [commentDraft, setCommentDraft] = useState('');
+  const [requesting, setRequesting] = useState(false);
 
-  // Reset likes and comments when swiping to a different post
   useEffect(() => {
-    setLikesCount(post.likes || 0);
-    setHasLiked(false);
+    setShowFull(false);
     setShowComments(false);
     setComments([]);
-    setIsRequesting(false);
+    setCommentDraft('');
+    setRequesting(false);
   }, [post?._id]);
 
-  // Sync likes count when props update externally (e.g. from database sync)
-  useEffect(() => {
-    setLikesCount(post.likes || 0);
-  }, [post.likes]);
-
   const fetchComments = useCallback(async () => {
-    setCommentsLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/get_comment?postId=${post._id}`);
-      const data = await response.json();
-      if (data.success) {
-        setComments(data.data);
-      }
+      const res = await fetch(`${API_BASE_URL}/get_comment?postId=${post._id}`);
+      const data = await res.json();
+      if (data.success) setComments(data.data);
     } catch (err) {
-      console.error("Error fetching comments:", err);
-    } finally {
-      setCommentsLoading(false);
+      console.error('Error fetching comments:', err);
     }
   }, [post._id]);
 
-  // Load comments when toggled
   useEffect(() => {
-    if (showComments) {
-      fetchComments();
-    }
+    if (showComments) fetchComments();
   }, [showComments, fetchComments]);
 
-
-
-  const handleLike = async () => {
-    // Optimistic update
-    const newLikes = likesCount + 1;
-    setLikesCount(newLikes);
-    setHasLiked(true);
-    if (onPostLiked) {
-      onPostLiked(post._id, newLikes);
-    }
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/increment_likes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, postId: post._id })
-      });
-      const data = await response.json();
-      if (!data.success) {
-        // Rollback
-        const rolledBackLikes = newLikes - 1;
-        setLikesCount(rolledBackLikes);
-        setHasLiked(false);
-        if (onPostLiked) {
-          onPostLiked(post._id, rolledBackLikes);
-        }
-      }
-    } catch (err) {
-      console.error("Error liking post:", err);
-      const rolledBackLikes = newLikes - 1;
-      setLikesCount(rolledBackLikes);
-      setHasLiked(false);
-      if (onPostLiked) {
-        onPostLiked(post._id, rolledBackLikes);
-      }
-    }
-  };
-
-  const handleAddComment = async (e) => {
+  const submitComment = async (e) => {
     e.preventDefault();
-    if (!newComment.trim()) return;
-
-    setAddCommentLoading(true);
+    const body = commentDraft.trim();
+    if (!body) return;
+    setCommentDraft('');
     try {
-      const response = await fetch(`${API_BASE_URL}/comment_post`, {
+      const res = await fetch(`${API_BASE_URL}/comment_post`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token,
-          postId: post._id,
-          commentBody: newComment
-        })
+        headers: authHeaders(token, true),
+        body: JSON.stringify({ postId: post._id, commentBody: body }),
       });
-      const data = await response.json();
-      if (data.success) {
-        setNewComment('');
-        fetchComments();
-      }
+      const data = await res.json();
+      if (data.success) fetchComments();
     } catch (err) {
-      console.error("Error adding comment:", err);
-    } finally {
-      setAddCommentLoading(false);
+      console.error('Error adding comment:', err);
     }
   };
 
-  const handleDeleteComment = async (commentId) => {
-    if (!window.confirm("Delete this comment?")) return;
-
+  const handleConnect = async (receiverId) => {
+    setRequesting(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/delete_comment_of_user`, {
+      const res = await fetch(`${API_BASE_URL}/user/send_connection_request`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, commentId })
+        headers: authHeaders(token, true),
+        body: JSON.stringify({ receiverId }),
       });
-      const data = await response.json();
-      if (data.success) {
-        fetchComments();
-      }
+      const data = await res.json();
+      if (data.success) onConnectionUpdated && onConnectionUpdated();
+      else setRequesting(false);
     } catch (err) {
-      console.error("Error deleting comment:", err);
+      console.error('Error sending connection:', err);
+      setRequesting(false);
     }
   };
 
-  const handleDeletePost = async () => {
-    if (!window.confirm("Are you sure you want to delete this post?")) return;
+  // ---- connection state for the post author ----
+  const authorId = post.userId?._id;
+  const isSelf = currentUser && authorId === currentUser._id;
+  const sentReq = sentRequests.find((r) => r.connectionId?._id === authorId);
+  const recReq = receivedRequests.find((r) => r.userId?._id === authorId);
+  const connected = sentReq?.status_accepted === true || recReq?.status_accepted === true;
+  const pending = requesting || (sentReq && sentReq.status_accepted === null);
+  const respond = recReq && recReq.status_accepted === null;
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/delete_post`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, postId: post._id })
-      });
-      const data = await response.json();
-      if (data.success) {
-        onPostDeleted();
-      } else {
-        alert(data.message || "Failed to delete post");
-      }
-    } catch (err) {
-      console.error("Error deleting post:", err);
+  const pillBase = {
+    flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, borderRadius: 9,
+    padding: '6px 11px', fontWeight: 800, fontSize: 12.5,
+  };
+
+  const renderConnect = () => {
+    if (isSelf) {
+      return <span style={{ ...pillBase, color: 'var(--soft)', background: 'var(--pill)', border: '1.5px solid var(--border)' }}>You</span>;
     }
-  };
-
-  const handleSendConnection = async (receiverId) => {
-    setIsRequesting(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/user/send_connection_request`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, receiverId })
-      });
-      const data = await response.json();
-      if (data.success) {
-        onConnectionUpdated();
-      } else {
-        alert(data.message || "Failed to send request");
-        setIsRequesting(false);
-      }
-    } catch (err) {
-      console.error("Error sending connection:", err);
-      setIsRequesting(false);
-    }
-  };
-
-  const handleShare = () => {
-    const textToCopy = `PU-Bay Post by ${post.userId.name}: "${post.body}"`;
-    navigator.clipboard.writeText(textToCopy);
-    alert("Copied post details to clipboard!");
-  };
-
-  // Determine connection status for the post author
-  const getConnectionButton = () => {
-    if (!currentUser || !post.userId) return null;
-    if (isRequesting) {
+    if (connected) {
       return (
-        <span style={{ 
-          fontSize: '0.8rem', 
-          color: 'var(--text-secondary)', 
-          fontWeight: 600, 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '0.25rem',
-          padding: '0.4rem 0.8rem',
-          background: 'var(--input-bg)',
-          borderRadius: 'var(--border-radius-md)',
-          flexShrink: 0
-        }}>
-          <Clock size={14} /> Pending
+        <span style={{ ...pillBase, color: 'var(--good)', background: 'var(--good-bg)', border: '1.5px solid var(--good)' }}>
+          <Check size={13} />Connected
         </span>
       );
     }
-    if (post.userId._id === currentUser._id) {
-      return (
-        <button 
-          className="btn btn-secondary" 
-          onClick={handleDeletePost}
-          style={{ color: 'var(--danger-color)', padding: '0.4rem 0.6rem', flexShrink: 0 }}
-          title="Delete Post"
-        >
-          <Trash2 size={16} />
-        </button>
-      );
+    if (respond) {
+      return <span style={{ ...pillBase, color: 'var(--accent)', background: 'var(--pill)', border: '1.5px solid var(--accent)' }}>Wants to connect</span>;
     }
-
-    // Check sent requests
-    const sentReq = sentRequests.find(req => req.connectionId?._id === post.userId._id);
-    if (sentReq) {
-      if (sentReq.status_accepted === true) {
-        return (
-          <span style={{ 
-            fontSize: '0.8rem', 
-            color: '#10b981', 
-            fontWeight: 600, 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '0.25rem',
-            padding: '0.4rem 0.8rem',
-            background: 'rgba(16, 185, 129, 0.1)',
-            borderRadius: 'var(--border-radius-md)',
-            flexShrink: 0
-          }}>
-            <Check size={14} /> Connected
-          </span>
-        );
-      }
+    if (pending) {
       return (
-        <span style={{ 
-          fontSize: '0.8rem', 
-          color: 'var(--text-secondary)', 
-          fontWeight: 600, 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '0.25rem',
-          padding: '0.4rem 0.8rem',
-          background: 'var(--input-bg)',
-          borderRadius: 'var(--border-radius-md)',
-          flexShrink: 0
-        }}>
-          <Clock size={14} /> Pending
+        <span style={{ ...pillBase, color: 'var(--soft)', background: 'var(--pill)', border: '1.5px solid var(--border)' }}>
+          <Clock size={13} />Pending
         </span>
       );
     }
-
-    // Check received requests
-    const recReq = receivedRequests.find(req => req.userId?._id === post.userId._id);
-    if (recReq) {
-      if (recReq.status_accepted === true) {
-        return (
-          <span style={{ 
-            fontSize: '0.8rem', 
-            color: '#10b981', 
-            fontWeight: 600, 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '0.25rem',
-            padding: '0.4rem 0.8rem',
-            background: 'rgba(16, 185, 129, 0.1)',
-            borderRadius: 'var(--border-radius-md)',
-            flexShrink: 0
-          }}>
-            <Check size={14} /> Connected
-          </span>
-        );
-      }
-      return (
-        <span style={{ 
-          fontSize: '0.8rem', 
-          color: 'var(--accent-color)', 
-          fontWeight: 600, 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '0.25rem',
-          padding: '0.4rem 0.8rem',
-          background: 'var(--accent-glow)',
-          borderRadius: 'var(--border-radius-md)',
-          flexShrink: 0
-        }}>
-          Respond in Profile
-        </span>
-      );
-    }
-
     return (
-      <button 
-        className="btn btn-secondary" 
-        onClick={() => handleSendConnection(post.userId._id)}
-        style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', borderColor: 'var(--accent-color)', color: 'var(--accent-color)', flexShrink: 0 }}
+      <button
+        data-nodrag
+        onClick={() => handleConnect(authorId)}
+        style={{ ...pillBase, color: 'var(--accent)', background: 'var(--card)', border: '1.5px solid var(--accent)', cursor: 'pointer' }}
       >
-        <UserPlus size={14} /> Connect
+        <Plus size={14} />Connect
       </button>
     );
   };
 
-  // Find headline of the poster if possible from all profiles
-  const posterProfile = allProfiles.find(p => p.userId?._id === post.userId?._id);
-  const rawHeadline = posterProfile?.currentPost || "Student at Panjab University";
-  const words = rawHeadline.trim().split(/\s+/);
-  const headline = words.length > 3 
-    ? words.slice(0, 3).join(' ') + '...' 
-    : rawHeadline;
+  // ---- headline ----
+  const posterProfile = allProfiles.find((p) => p.userId?._id === authorId);
+  const headline = posterProfile?.currentPost || 'Student at Panjab University';
+  const subline = `${headline} · ${timeAgo(post.createdAt)}`;
 
-  // WhatsApp-style show more logic
-  const maxChars = 180;
-  const isLongText = post.body.length > maxChars;
-  const displayText = isLongText && !isExpanded 
-    ? `${post.body.slice(0, maxChars)}... ` 
-    : post.body;
-
-  const authorAvatarUrl = post.userId?.profilePicture && post.userId.profilePicture !== 'default.jpg'
-    ? `${API_BASE_URL}/${post.userId.profilePicture}`
-    : null;
+  const isLong = post.body.length > MAX_BODY;
+  const bodyText = isLong && !showFull ? `${post.body.slice(0, MAX_BODY).trim()}… ` : post.body;
+  const isVideo = VIDEO_TYPES.includes(post.fileType);
 
   return (
-    <div className={`glow-card swipe-card ${swipeDirection === 'left' ? 'swipe-left' : 'swipe-right'}`}>
-      {/* Card Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', width: '100%', minWidth: 0 }}>
-        <div 
-          style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', minWidth: 0, flex: 1 }}
-          onClick={() => onViewProfile && onViewProfile(post.userId?._id)}
-        >
-          {authorAvatarUrl ? (
-            <img 
-              src={authorAvatarUrl} 
-              alt={post.userId.name} 
-              style={{
-                width: '45px',
-                height: '45px',
-                borderRadius: '50%',
-                objectFit: 'cover',
-                border: '1.5px solid var(--accent-color)',
-                flexShrink: 0
-              }}
-            />
-          ) : (
-            <div style={{
-              width: '45px',
-              height: '45px',
-              borderRadius: '50%',
-              backgroundColor: 'var(--input-bg)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              border: '1.5px solid var(--accent-color)',
-              flexShrink: 0
-            }}>
-              <User size={20} />
-            </div>
-          )}
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <h4 style={{ fontWeight: 700, fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.userId?.name}</h4>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{headline}</p>
-          </div>
-        </div>
-        {getConnectionButton()}
-      </div>
+    <div
+      style={{
+        position: 'relative', height: '100%', background: 'var(--card)', border: '2px solid var(--line)',
+        borderRadius: 18, boxShadow: '6px 6px 0 var(--shadow)', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      }}
+    >
+      {/* swipe stamps */}
+      <div style={{ position: 'absolute', top: 22, left: 18, zIndex: 9, border: '3px solid var(--good)', color: 'var(--good)', fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 24, padding: '1px 11px', borderRadius: 9, transform: 'rotate(-14deg)', opacity: likeStampOpacity, letterSpacing: '0.05em', pointerEvents: 'none' }}>LIKED</div>
+      <div style={{ position: 'absolute', top: 22, right: 18, zIndex: 9, border: '3px solid var(--ink)', color: 'var(--ink)', fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 24, padding: '1px 11px', borderRadius: 9, transform: 'rotate(14deg)', opacity: skipStampOpacity, letterSpacing: '0.05em', pointerEvents: 'none' }}>SKIP</div>
 
-      {/* Media if present */}
-      {post.media && (
-        <div style={{
-          backgroundColor: '#000',
-          borderRadius: 'var(--border-radius-md)',
-          overflow: 'hidden',
-          maxHeight: '340px',
-          width: '100%',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          border: '1px solid var(--border-color)'
-        }}>
-          {['mp4', 'mov', 'avi', 'webm'].includes(post.fileType) ? (
-            <video 
-              src={`${API_BASE_URL}/${post.media}`} 
-              controls 
-              style={{ width: '100%', maxHeight: '340px', objectFit: 'contain' }}
-            />
-          ) : (
-            <img 
-              src={`${API_BASE_URL}/${post.media}`} 
-              alt="Post media" 
-              style={{ width: '100%', maxHeight: '340px', objectFit: 'contain' }}
-            />
-          )}
-        </div>
-      )}
-
-      {/* Post content body */}
-      <div style={{ fontSize: '0.95rem', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
-        <span>{displayText}</span>
-        {isLongText && (
-          <span 
-            onClick={() => setIsExpanded(!isExpanded)}
-            style={{ 
-              color: 'var(--accent-color)', 
-              fontWeight: 600, 
-              cursor: 'pointer',
-              marginLeft: '0.25rem',
-              textDecoration: 'underline'
-            }}
+      {/* scrollable body */}
+      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '20px 20px 6px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+          <div
+            data-nodrag
+            onClick={() => onViewProfile && onViewProfile(authorId)}
+            style={{ display: 'flex', alignItems: 'center', gap: 11, cursor: 'pointer', minWidth: 0 }}
           >
-            {isExpanded ? 'Show Less' : 'Show More'}
-          </span>
+            <Avatar user={post.userId} size={46} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--ink)' }}>{post.userId?.name}</div>
+              <div style={{ fontSize: 12.5, color: 'var(--soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subline}</div>
+            </div>
+          </div>
+          {renderConnect()}
+        </div>
+
+        <div style={{ marginTop: 16, fontSize: 16, lineHeight: 1.55, color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>
+          {bodyText}
+          {isLong && (
+            <span data-nodrag onClick={() => setShowFull(!showFull)} style={{ color: 'var(--accent)', fontWeight: 800, cursor: 'pointer' }}>
+              {showFull ? 'show less' : 'read more'}
+            </span>
+          )}
+        </div>
+
+        {post.media && (
+          <div style={{ marginTop: 14, border: '1.5px solid var(--line)', borderRadius: 12, overflow: 'hidden', background: 'var(--pill)' }}>
+            {isVideo ? (
+              <video data-nodrag src={`${API_BASE_URL}/${post.media}`} controls style={{ display: 'block', width: '100%', maxHeight: 300, objectFit: 'contain' }} />
+            ) : (
+              <img src={`${API_BASE_URL}/${post.media}`} alt="Post media" draggable={false} style={{ display: 'block', width: '100%', height: 'auto', maxHeight: 300, objectFit: 'cover' }} />
+            )}
+          </div>
+        )}
+
+        {showComments && (
+          <div data-nodrag style={{ marginTop: 16, borderTop: '1.5px solid var(--border)', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <form onSubmit={submitComment} style={{ display: 'flex', gap: 8 }}>
+              <input
+                className="pu-input"
+                value={commentDraft}
+                onChange={(e) => setCommentDraft(e.target.value)}
+                placeholder="Add a comment…"
+                style={{ flex: 1, padding: '9px 12px', border: '1.5px solid var(--border)', borderRadius: 10, background: 'var(--pill)', color: 'var(--ink)', fontSize: 13.5, fontFamily: 'inherit', outline: 'none' }}
+              />
+              <button type="submit" style={{ width: 38, flexShrink: 0, background: 'var(--accent)', color: 'var(--accent-ink)', border: '1.5px solid var(--line)', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Send size={16} />
+              </button>
+            </form>
+            {comments.length > 0 ? (
+              comments.map((c) => (
+                <div key={c._id} style={{ display: 'flex', gap: 9, alignItems: 'flex-start' }}>
+                  <Avatar user={c.userId} size={30} style={{ border: '1px solid var(--line)' }} />
+                  <div style={{ background: 'var(--pill)', border: '1px solid var(--border)', borderRadius: 12, padding: '8px 11px', flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 12.5, color: 'var(--ink)' }}>{c.userId?.name}</div>
+                    <div style={{ fontSize: 13.5, color: 'var(--ink)', marginTop: 1, lineHeight: 1.4 }}>{c.body}</div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div style={{ fontSize: 12.5, color: 'var(--soft)', textAlign: 'center', padding: '4px 0' }}>Be the first to comment.</div>
+            )}
+          </div>
         )}
       </div>
 
-      {/* Post Actions Footer */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        borderTop: '1px solid var(--border-color)', 
-        borderBottom: '1px solid var(--border-color)',
-        padding: '0.75rem 0.25rem' 
-      }}>
-        <button 
-          className="btn btn-secondary" 
-          onClick={handleLike}
-          disabled={hasLiked}
-          style={{ 
-            flex: 1, 
-            background: 'none', 
-            border: 'none', 
-            color: hasLiked ? 'var(--accent-color)' : 'var(--text-secondary)' 
-          }}
-        >
-          <Heart size={18} fill={hasLiked ? 'currentColor' : 'none'} />
-          <span style={{ fontWeight: 600 }}>{likesCount}</span>
+      {/* action footer */}
+      <div data-nodrag style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, padding: '11px 16px', borderTop: '1.5px solid var(--border)', background: 'var(--card)' }}>
+        <button onClick={onSkip} title="Skip" className="pu-press" style={iconCircle('var(--card)', 'var(--ink)')}>
+          <X size={20} />
         </button>
-
-        <button 
-          className="btn btn-secondary" 
-          onClick={() => setShowComments(!showComments)}
-          style={{ 
-            flex: 1, 
-            background: 'none', 
-            border: 'none', 
-            color: showComments ? 'var(--accent-color)' : 'var(--text-secondary)' 
-          }}
+        <button
+          onClick={onHeart}
+          title={liked ? 'Remove like' : 'Like'}
+          aria-pressed={liked}
+          className="pu-hov-accent"
+          style={{ ...ghostBtn, color: liked ? 'var(--accent)' : 'var(--soft)' }}
         >
+          <Heart size={18} fill={liked ? 'currentColor' : 'none'} />
+          <span style={{ fontSize: 13.5, fontWeight: 800 }}>{post.likes || 0}</span>
+        </button>
+        <button onClick={() => setShowComments(!showComments)} className="pu-hov-ink" style={ghostBtn}>
           <MessageCircle size={18} />
-          <span style={{ fontWeight: 600 }}>Comment</span>
+          <span style={{ fontSize: 13.5, fontWeight: 800 }}>{comments.length || post.commentCount || 0}</span>
         </button>
-
-        <button 
-          className="btn btn-secondary" 
-          onClick={handleShare}
-          style={{ flex: 1, background: 'none', border: 'none', color: 'var(--text-secondary)' }}
-        >
-          <Share2 size={18} />
-          <span style={{ fontWeight: 600 }}>Share</span>
+        {isSelf ? (
+          <button onClick={() => onDeletePost && onDeletePost(post)} title="Delete post" className="pu-hov-ink" style={{ ...ghostBtn, color: 'var(--danger)' }}>
+            <Trash2 size={18} />
+          </button>
+        ) : (
+          <button onClick={onShare} title="Share" className="pu-hov-ink" style={{ ...ghostBtn, padding: 6 }}>
+            <Share2 size={18} />
+          </button>
+        )}
+        <button onClick={onLike} title="Like & next" className="pu-press" style={iconCircle('var(--accent)', 'var(--accent-ink)')}>
+          <Heart size={19} fill="currentColor" stroke="none" />
         </button>
       </div>
-
-      {/* Collapsible comments section */}
-      {showComments && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.25rem' }}>
-          {/* New Comment Form */}
-          <form onSubmit={handleAddComment} style={{ display: 'flex', gap: '0.5rem' }}>
-            <input 
-              type="text" 
-              placeholder="Write a comment..." 
-              className="input-field"
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              disabled={addCommentLoading}
-              required
-              style={{ fontSize: '0.85rem', padding: '0.5rem 0.75rem' }}
-            />
-            <button 
-              type="submit" 
-              className="btn btn-primary" 
-              disabled={addCommentLoading || !newComment.trim()}
-              style={{ padding: '0.5rem' }}
-            >
-              <Send size={14} />
-            </button>
-          </form>
-
-          {/* Comments list */}
-          {commentsLoading ? (
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center' }}>Loading comments...</p>
-          ) : comments.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '220px', overflowY: 'auto', paddingRight: '0.25rem' }}>
-              {comments.map((comment) => {
-                const commentAvatar = comment.userId?.profilePicture && comment.userId.profilePicture !== 'default.jpg'
-                  ? `${API_BASE_URL}/${comment.userId.profilePicture}`
-                  : null;
-
-                return (
-                  <div key={comment._id} style={{ 
-                    display: 'flex', 
-                    gap: '0.5rem', 
-                    background: 'var(--input-bg)', 
-                    padding: '0.6rem 0.8rem', 
-                    borderRadius: 'var(--border-radius-md)',
-                    alignItems: 'flex-start'
-                  }}>
-                    {commentAvatar ? (
-                      <img 
-                        src={commentAvatar} 
-                        alt="Commenter avatar" 
-                        style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} 
-                      />
-                    ) : (
-                      <div style={{
-                        width: '28px',
-                        height: '28px',
-                        borderRadius: '50%',
-                        backgroundColor: 'var(--card-bg)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        border: '1px solid var(--border-color)'
-                      }}>
-                        <User size={12} />
-                      </div>
-                    )}
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontWeight: 700, fontSize: '0.8rem' }}>{comment.userId?.name}</span>
-                        {currentUser && comment.userId && comment.userId._id === currentUser._id && (
-                          <button 
-                            onClick={() => handleDeleteComment(comment._id)}
-                            style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: 0 }}
-                          >
-                            <Trash2 size={12} style={{ color: 'var(--danger-color)' }} />
-                          </button>
-                        )}
-                      </div>
-                      <p style={{ fontSize: '0.85rem', marginTop: '0.15rem', color: 'var(--text-primary)' }}>{comment.body}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center' }}>No comments yet.</p>
-          )}
-        </div>
-      )}
     </div>
   );
+}
+
+const ghostBtn = {
+  display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none',
+  color: 'var(--soft)', cursor: 'pointer', fontFamily: 'inherit', padding: 6,
+};
+
+function iconCircle(bg, color) {
+  return {
+    width: 46, height: 46, flexShrink: 0, borderRadius: '50%', border: '2px solid var(--line)',
+    background: bg, color, boxShadow: '2px 2px 0 var(--shadow)', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  };
+}
+
+function timeAgo(dateStr) {
+  if (!dateStr) return 'now';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'now';
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  return `${d}d`;
 }

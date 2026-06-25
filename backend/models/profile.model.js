@@ -53,5 +53,8 @@ const ProfileSchema = new mongoose.Schema({
   },
 });
 
+// Profiles are looked up by their owning user.
+ProfileSchema.index({ userId: 1 });
+
 const Profile = mongoose.model("Profile", ProfileSchema);
 export default Profile;

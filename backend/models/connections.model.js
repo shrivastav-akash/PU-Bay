@@ -15,6 +15,10 @@ const connectionRequest = new mongoose.Schema({
   },
 });
 
+// Queried by sender (outgoing) and by receiver (incoming).
+connectionRequest.index({ userId: 1, connectionId: 1 });
+connectionRequest.index({ connectionId: 1 });
+
 const ConnectionRequest = mongoose.model(
   "ConnectionRequest",
   connectionRequest,

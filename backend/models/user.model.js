@@ -31,11 +31,9 @@ const UserSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
-  token: {
-    type: String,
-    default: "",
-  },
 });
+
+// email and username are already indexed via `unique: true` above.
 
 const User = mongoose.model("User", UserSchema);
 export default User;

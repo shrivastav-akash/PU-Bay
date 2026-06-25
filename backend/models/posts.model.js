@@ -13,6 +13,12 @@ const PostSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  likedBy: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+  ],
   createdAt: {
     type: Date,
     default: Date.now,
@@ -34,6 +40,10 @@ const PostSchema = new mongoose.Schema({
     default: "",
   },
 });
+
+// Feed loads newest-first; profile views filter by author.
+PostSchema.index({ createdAt: -1 });
+PostSchema.index({ userId: 1, createdAt: -1 });
 
 const Post = mongoose.model("Post", PostSchema);
 export default Post;

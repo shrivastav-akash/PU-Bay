@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { API_BASE_URL } from '../config';
-import { Mail, Lock, User, AtSign, ArrowRight, Sparkles } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
+
+const inputStyle = {
+  width: '100%', padding: '12px 14px', border: '1.5px solid var(--border)', borderRadius: 11,
+  background: 'var(--pill)', color: 'var(--ink)', fontSize: 15, fontFamily: 'inherit', outline: 'none',
+};
 
 export default function Auth({ onLoginSuccess, onBackToLanding }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -17,34 +22,25 @@ export default function Auth({ onLoginSuccess, onBackToLanding }) {
     setLoading(true);
 
     const endpoint = isLogin ? '/login' : '/register';
-    const payload = isLogin 
-      ? { email, password } 
-      : { name, username, email, password };
+    const payload = isLogin ? { email, password } : { name, username, email, password };
 
     try {
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-
       const data = await response.json();
-
       if (!response.ok || !data.success) {
         throw new Error(data.message || 'Something went wrong');
       }
-
       if (isLogin) {
         const token = data.data.token;
         localStorage.setItem('token', token);
         onLoginSuccess(token);
       } else {
-        // After successful registration, toggle to login screen
         setIsLogin(true);
-        setError('');
-        alert('Registration successful! Please login.');
+        setError('Account created — sign in to continue.');
       }
     } catch (err) {
       setError(err.message);
@@ -54,183 +50,82 @@ export default function Auth({ onLoginSuccess, onBackToLanding }) {
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: 'calc(100vh - 70px)',
-      padding: '2rem',
-      background: 'radial-gradient(circle at top left, var(--accent-glow) 0%, transparent 60%)'
-    }}>
-      <div className="glow-card pulse-border" style={{ maxWidth: '420px', padding: '2.5rem', display: 'flex', flexDirection: 'column' }}>
-        {onBackToLanding && (
-          <button 
-            type="button" 
-            onClick={onBackToLanding}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer',
-              alignSelf: 'flex-start',
-              fontSize: '0.85rem',
-              fontWeight: 500,
-              padding: '0 0 1rem 0',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.25rem',
-              transition: 'color var(--transition-smooth)'
-            }}
-            onMouseEnter={(e) => e.target.style.color = 'var(--accent-color)'}
-            onMouseLeave={(e) => e.target.style.color = 'var(--text-secondary)'}
-          >
-            &larr; Back to Landing Page
-          </button>
-        )}
-        <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-          <h1 style={{ 
-            fontFamily: 'var(--font-heading)', 
-            fontWeight: 800, 
-            fontSize: '2rem',
-            marginBottom: '0.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '0.5rem'
-          }}>
-            <Sparkles size={28} color="var(--accent-color)" />
-            {isLogin ? 'Welcome Back' : 'Join PU-Bay'}
-          </h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-            {isLogin ? 'Login to connect with fellow PU students' : 'Create an account to get started'}
-          </p>
+    <section
+      style={{ minHeight: 'calc(100vh - 66px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 20px' }}
+    >
+      <div
+        className="pu-rise"
+        style={{
+          width: '100%', maxWidth: 418, background: 'var(--card)', border: '2px solid var(--line)',
+          borderRadius: 20, boxShadow: '8px 8px 0 var(--shadow)', padding: 30,
+        }}
+      >
+        <button
+          type="button"
+          onClick={onBackToLanding}
+          className="pu-hov-accent"
+          style={{
+            background: 'none', border: 'none', color: 'var(--soft)', fontWeight: 700, fontSize: 13,
+            cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 5,
+          }}
+        >
+          ← Back
+        </button>
+
+        <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 27, color: 'var(--ink)', marginTop: 14, letterSpacing: '-0.02em' }}>
+          {isLogin ? 'Welcome back' : 'Join PU-Bay'}
+        </div>
+        <div style={{ fontSize: 14, color: 'var(--soft)', marginTop: 4 }}>
+          {isLogin ? 'Sign in to connect with fellow PU students.' : 'Create an account to get started.'}
         </div>
 
         {error && (
-          <div style={{
-            background: 'rgba(239, 68, 68, 0.15)',
-            border: '1px solid var(--danger-color)',
-            color: 'var(--danger-color)',
-            padding: '0.75rem 1rem',
-            borderRadius: 'var(--border-radius-md)',
-            fontSize: '0.85rem',
-            fontWeight: 500,
-            marginBottom: '1rem'
-          }}>
+          <div
+            style={{
+              marginTop: 16, background: 'var(--good-bg)', border: '1.5px solid var(--border)',
+              color: 'var(--ink)', padding: '10px 13px', borderRadius: 11, fontSize: 13, fontWeight: 600,
+            }}
+          >
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 11, marginTop: 22 }}>
           {!isLogin && (
             <>
-              <div style={{ position: 'relative' }}>
-                <User size={18} style={{
-                  position: 'absolute',
-                  left: '14px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: 'var(--text-secondary)'
-                }} />
-                <input
-                  type="text"
-                  placeholder="Full Name"
-                  className="input-field"
-                  style={{ paddingLeft: '2.75rem' }}
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div style={{ position: 'relative' }}>
-                <AtSign size={18} style={{
-                  position: 'absolute',
-                  left: '14px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: 'var(--text-secondary)'
-                }} />
-                <input
-                  type="text"
-                  placeholder="Username"
-                  className="input-field"
-                  style={{ paddingLeft: '2.75rem' }}
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  required
-                />
-              </div>
+              <input className="pu-input" placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} required style={inputStyle} />
+              <input className="pu-input" placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} required style={inputStyle} />
             </>
           )}
+          <input className="pu-input" type="email" placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} required style={inputStyle} />
+          <input className="pu-input" type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required style={inputStyle} />
 
-          <div style={{ position: 'relative' }}>
-            <Mail size={18} style={{
-              position: 'absolute',
-              left: '14px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: 'var(--text-secondary)'
-            }} />
-            <input
-              type="email"
-              placeholder="Email address"
-              className="input-field"
-              style={{ paddingLeft: '2.75rem' }}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-
-          <div style={{ position: 'relative' }}>
-            <Lock size={18} style={{
-              position: 'absolute',
-              left: '14px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: 'var(--text-secondary)'
-            }} />
-            <input
-              type="password"
-              placeholder="Password"
-              className="input-field"
-              style={{ paddingLeft: '2.75rem' }}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-
-          <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem' }} disabled={loading}>
-            {loading ? 'Please wait...' : isLogin ? 'Sign In' : 'Create Account'}
-            {!loading && <ArrowRight size={18} />}
+          <button
+            type="submit"
+            disabled={loading}
+            className="pu-press"
+            style={{
+              marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              background: 'var(--accent)', color: 'var(--accent-ink)', border: '2px solid var(--line)',
+              borderRadius: 12, padding: 13, fontWeight: 800, fontSize: 15.5, cursor: 'pointer',
+              boxShadow: '4px 4px 0 var(--shadow)', opacity: loading ? 0.7 : 1,
+            }}
+          >
+            {loading ? 'Please wait…' : isLogin ? 'Sign in' : 'Create account'}
+            {!loading && <ArrowRight size={17} />}
           </button>
         </form>
 
-        <div style={{ 
-          textAlign: 'center', 
-          marginTop: '1.5rem', 
-          fontSize: '0.9rem',
-          color: 'var(--text-secondary)'
-        }}>
-          {isLogin ? "Don't have an account? " : "Already have an account? "}
-          <span 
-            onClick={() => {
-              setIsLogin(!isLogin);
-              setError('');
-            }}
-            style={{ 
-              color: 'var(--accent-color)', 
-              fontWeight: 600, 
-              cursor: 'pointer',
-              textDecoration: 'underline'
-            }}
+        <div style={{ textAlign: 'center', fontSize: 13.5, color: 'var(--soft)', marginTop: 18 }}>
+          {isLogin ? "Don't have an account? " : 'Already have an account? '}
+          <span
+            onClick={() => { setIsLogin(!isLogin); setError(''); }}
+            style={{ color: 'var(--accent)', fontWeight: 800, cursor: 'pointer' }}
           >
-            {isLogin ? 'Register' : 'Login'}
+            {isLogin ? 'Register' : 'Sign in'}
           </span>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
