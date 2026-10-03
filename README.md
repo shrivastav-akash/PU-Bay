@@ -99,8 +99,10 @@ Nexora solves a common problem on university campuses: students lack a dedicated
 | JWT (jsonwebtoken)      | Authentication tokens          |
 | bcrypt                  | Password hashing               |
 | Multer                  | File upload handling           |
-| PDFKit                  | Résumé PDF generation          |
-| Nodemon                 | Dev server hot-reload          |
+| PDFKit                  | Résumé PDF generation (streamed) |
+| Zod                     | Env and request validation     |
+| express-rate-limit      | Login/register throttling      |
+| Vitest + Supertest      | API tests                      |
 
 ---
 
@@ -109,11 +111,12 @@ Nexora solves a common problem on university campuses: students lack a dedicated
 ```
 PU-Bay/   (repository folder)
 ├── backend/                           # Express API server
+│   ├── config/env.js                  # Zod-validated environment
 │   ├── controllers/
 │   │   ├── posts.controller.js        # Post CRUD, likes, comments
 │   │   └── user.controller.js         # Auth, profile, connections, PDF
-│   ├── middleware/
-│   │   └── auth.js                    # JWT verification middleware
+│   ├── lib/                           # HttpError, upload config
+│   ├── middleware/                    # auth, validate, rate-limit, error
 │   ├── models/
 │   │   ├── comments.model.js          # Comment schema
 │   │   ├── connections.model.js       # Connection request schema
@@ -123,8 +126,11 @@ PU-Bay/   (repository folder)
 │   ├── routes/
 │   │   ├── posts.routes.js            # Post & comment routes
 │   │   └── user.routes.js             # Auth, profile, connection routes
-│   ├── uploads/                       # File storage (Multer)
-│   ├── server.js                      # Entry point
+│   ├── schemas.js                     # Strict Zod request schemas
+│   ├── tests/                         # Vitest + Supertest
+│   ├── uploads/                       # File storage (git-ignored)
+│   ├── app.js                         # Express app
+│   ├── server.js                      # Connects to MongoDB, then listens
 │   ├── package.json
 │   ├── .env.example
 │   └── .gitignore
@@ -255,7 +261,7 @@ Then open `http://localhost:5173` in your browser.
     │ ─────────────────────────────►│                               │
     │                               │  bcrypt.hash(pw, 10)          │
     │                               │  Create User + Profile ──────►│
-    │  200 "user created"           │                               │
+    │  201 "user created"           │                               │
     │ ◄─────────────────────────────│                               │
     │                               │                               │
     │  POST /login                  │                               │
@@ -316,6 +322,8 @@ Then open `http://localhost:5173` in your browser.
 | `GET`  | `/user/get_connection_request`        | Get sent requests                      |
 | `GET`  | `/user/user_connection_request`       | Get received requests                  |
 | `POST` | `/user/accept_connection_request`     | Accept or reject a request             |
+
+Errors from every endpoint share one shape: `{ "error": { "code": "...", "message": "..." } }`.
 
 > For full request/response details, see the [Backend README](backend/README.md).
 
@@ -390,19 +398,16 @@ Full rules, contrast notes and copy guidelines: [`DESIGN.md`](DESIGN.md).
 
 The backend requires a `.env` file in `backend/`:
 
-| Variable     | Description                                 |
-| ------------ | ------------------------------------------- |
-| `PORT`       | Server port (default: `3000`)               |
-| `MONGO_URI`  | MongoDB connection string                   |
-| `JWT_SECRET` | Secret key for JWT signing & verification   |
+| Variable          | Description                                                   |
+| ----------------- | ------------------------------------------------------------- |
+| `MONGO_URI`       | MongoDB connection string (required)                          |
+| `JWT_SECRET`      | At least 32 characters (required)                             |
+| `PORT`            | Server port (default `3000`)                                  |
+| `CLIENT_ORIGIN`   | CORS allowlist, comma-separated (default the Vite dev server) |
+| `UPLOAD_DIR`      | Upload folder (default `backend/uploads`)                     |
+| `AUTH_RATE_LIMIT` | Login/register attempts per IP per 15 min (default `20`)      |
 
-A `.env.example` template is provided:
-
-```env
-MONGO_URI=
-PORT=
-JWT_SECRET=replace_with_a_long_random_secret
-```
+Copy `backend/.env.example` to `backend/.env`. The server validates these at startup and exits with a clear message if any are missing or invalid. Details: [Backend README](backend/README.md#environment-variables).
 
 The frontend has **no environment variables** — it dynamically derives the API URL from the browser's hostname.
 

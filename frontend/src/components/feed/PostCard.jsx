@@ -75,7 +75,8 @@ export default function PostCard({ post, headline, liked, onToggleLike, onCommen
         {onComments && (
           <Button variant="ghost" size="sm" onClick={onComments}>
             <MessageCircle data-icon="inline-start" />
-            Comments
+            {post.commentCount > 0 ? <span className="font-mono">{post.commentCount}</span> : 'Comment'}
+            {post.commentCount > 0 && <span className="sr-only"> comments</span>}
           </Button>
         )}
         <div className="ml-auto flex">

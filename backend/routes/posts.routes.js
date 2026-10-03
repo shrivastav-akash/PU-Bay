@@ -1,6 +1,7 @@
 import { Router } from "express";
-import multer from "multer";
 import authMiddleware from "../middleware/auth.js";
+import { validate } from "../middleware/validate.js";
+import { postMedia } from "../lib/uploads.js";
 import {
   createPost,
   getAllPosts,
@@ -11,31 +12,35 @@ import {
   increment_likes,
   decrement_likes,
 } from "../controllers/posts.controller.js";
+import {
+  commentBody,
+  commentIdBody,
+  createPostBody,
+  postIdBody,
+  postIdQuery,
+  postsQuery,
+} from "../schemas.js";
+
 const router = Router();
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/");
-  },
-  filename: (req, file, cb) => {
-    cb(null, file.originalname);
-  },
-});
-
-const upload = multer({ storage: storage });
-
 // Public reads (feed and comments are viewable on the landing page)
-router.route("/get_all_posts").get(getAllPosts);
-router.route("/get_comment").get(get_comment_by_post);
+router.route("/get_all_posts").get(validate({ query: postsQuery }), getAllPosts);
+router.route("/get_comment").get(validate({ query: postIdQuery }), get_comment_by_post);
 
-// Authenticated writes
-router.route("/post").post(authMiddleware, upload.single("media"), createPost);
-router.route("/delete_post").post(authMiddleware, deletePost);
-router.route("/comment_post").post(authMiddleware, commentPost);
+// Authenticated writes. Multer runs before validation so multipart fields exist.
+router
+  .route("/post")
+  .post(authMiddleware, postMedia, validate({ body: createPostBody }), createPost);
+router.route("/delete_post").post(authMiddleware, validate({ body: postIdBody }), deletePost);
+router.route("/comment_post").post(authMiddleware, validate({ body: commentBody }), commentPost);
 router
   .route("/delete_comment_of_user")
-  .post(authMiddleware, delete_comment_of_user);
-router.route("/increment_likes").post(authMiddleware, increment_likes);
-router.route("/decrement_likes").post(authMiddleware, decrement_likes);
+  .post(authMiddleware, validate({ body: commentIdBody }), delete_comment_of_user);
+router
+  .route("/increment_likes")
+  .post(authMiddleware, validate({ body: postIdBody }), increment_likes);
+router
+  .route("/decrement_likes")
+  .post(authMiddleware, validate({ body: postIdBody }), decrement_likes);
 
 export default router;

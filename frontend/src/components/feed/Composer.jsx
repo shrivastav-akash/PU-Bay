@@ -44,7 +44,7 @@ function ComposerForm({ onDone }) {
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!body.trim()) return;
+    if (!body.trim() && !media) return;
     setBusy(true);
     const form = new FormData();
     form.append('body', body.trim());
@@ -69,7 +69,7 @@ function ComposerForm({ onDone }) {
     <form onSubmit={submit} className="flex flex-col gap-4">
       <Field>
         <FieldLabel htmlFor="composer-body">{first ? `What's new, ${first}?` : "What's new?"}</FieldLabel>
-        <Textarea id="composer-body" value={body} onChange={(e) => setBody(e.target.value)} rows={5} className="min-h-32 resize-y" required autoFocus />
+        <Textarea id="composer-body" value={body} onChange={(e) => setBody(e.target.value)} rows={5} className="min-h-32 resize-y" autoFocus />
       </Field>
 
       {media && (
@@ -91,7 +91,7 @@ function ComposerForm({ onDone }) {
           <ImagePlus data-icon="inline-start" />
           {media ? 'Replace media' : 'Add media'}
         </Button>
-        <Button type="submit" disabled={busy || !body.trim()}>
+        <Button type="submit" disabled={busy || (!body.trim() && !media)}>
           {busy && <Spinner data-icon="inline-start" />}
           Post
         </Button>

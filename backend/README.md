@@ -1,6 +1,6 @@
-# PU-Bay — Backend
+# Nexora: Backend
 
-REST API server for the PU-Bay campus social network, built with **Express 5**, **MongoDB** (Mongoose), and **JWT authentication**.
+REST API for the Nexora campus social network (formerly PU-Bay), built with **Express 5**, **MongoDB** (Mongoose 9) and **JWT authentication**.
 
 ---
 
@@ -10,30 +10,30 @@ REST API server for the PU-Bay campus social network, built with **Express 5**, 
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
 - [Environment Variables](#environment-variables)
+- [Responses and Errors](#responses-and-errors)
 - [API Reference](#api-reference)
-  - [Authentication](#authentication)
-  - [User & Profile](#user--profile)
-  - [Posts](#posts)
-  - [Comments](#comments)
-  - [Connections](#connections)
 - [Database Models](#database-models)
-- [Authentication Flow](#authentication-flow)
+- [Security](#security)
 - [File Uploads](#file-uploads)
+- [Testing](#testing)
 - [Scripts](#scripts)
 
 ---
 
 ## Tech Stack
 
-| Layer            | Technology                       |
-| ---------------- | -------------------------------- |
-| Runtime          | Node.js (ES Modules)             |
-| Framework        | Express 5                        |
-| Database         | MongoDB Atlas via Mongoose 9     |
-| Authentication   | JWT (`jsonwebtoken`) + bcrypt    |
-| File Uploads     | Multer (disk storage)            |
-| PDF Generation   | PDFKit                           |
-| Dev Server       | Nodemon                          |
+| Layer          | Technology                                   |
+| -------------- | -------------------------------------------- |
+| Runtime        | Node.js 18+ (ES Modules)                     |
+| Framework      | Express 5                                    |
+| Database       | MongoDB via Mongoose 9                       |
+| Validation     | Zod 4 (env, body, query)                     |
+| Authentication | JWT (`jsonwebtoken`) + bcrypt                |
+| Rate limiting  | express-rate-limit (login and register)      |
+| File uploads   | Multer (disk storage)                        |
+| PDF            | PDFKit (streamed)                            |
+| Tests          | Vitest + Supertest                           |
+| Dev server     | `node --watch`                               |
 
 ---
 
@@ -41,350 +41,192 @@ REST API server for the PU-Bay campus social network, built with **Express 5**, 
 
 ```
 backend/
+├── config/env.js              # Zod-validated environment, fails fast on startup
 ├── controllers/
-│   ├── posts.controller.js    # Post CRUD, likes, comments
-│   └── user.controller.js     # Auth, profile, connections, PDF resume
+│   ├── posts.controller.js    # Posts, likes, comments
+│   └── user.controller.js     # Auth, profile, connections, résumé PDF
+├── lib/
+│   ├── http-error.js          # HttpError(status, code, message)
+│   └── uploads.js             # Multer configs, removeUpload()
 ├── middleware/
-│   └── auth.js                # JWT verification middleware
-├── models/
-│   ├── comments.model.js      # Comment schema
-│   ├── connections.model.js   # Connection request schema
-│   ├── posts.model.js         # Post schema (with likes, media)
-│   ├── profile.model.js       # Extended profile (work, education)
-│   └── user.model.js          # Core user schema
-├── routes/
-│   ├── posts.routes.js        # Post & comment endpoints
-│   └── user.routes.js         # Auth, profile, connection endpoints
-├── uploads/                   # Multer file storage directory
-├── .env                       # Environment variables (git-ignored)
-├── .env.example               # Template for required env vars
-├── .gitignore
-├── package.json
-└── server.js                  # Application entry point
+│   ├── auth.js                # JWT verification
+│   ├── error.js               # 404 + the single error handler
+│   ├── rate-limit.js          # Auth brute-force limiter
+│   └── validate.js            # Strict Zod parsing into req.valid
+├── models/                    # User, Profile, Post, Comment, ConnectionRequest
+├── routes/                    # posts.routes.js, user.routes.js
+├── schemas.js                 # Every request schema
+├── tests/                     # Vitest + Supertest suites
+├── uploads/                   # Runtime file storage (git-ignored)
+├── app.js                     # Express app (imported by tests)
+└── server.js                  # Connects to MongoDB, then listens
 ```
 
 ---
 
 ## Getting Started
 
-### Prerequisites
-
-- **Node.js** v18 or higher
-- **npm** v9 or higher
-- A **MongoDB** instance (local or [MongoDB Atlas](https://www.mongodb.com/atlas))
-
-### Installation
-
 ```bash
-# Navigate to the backend directory
 cd backend
-
-# Install dependencies
 npm install
+cp .env.example .env   # then fill in MONGO_URI and JWT_SECRET
+npm run dev            # http://localhost:3000, restarts on file changes
 ```
 
-### Configuration
-
-Create a `.env` file based on the provided example:
-
-```bash
-cp .env.example .env
-```
-
-Fill in the required values (see [Environment Variables](#environment-variables) below).
-
-### Run the Server
-
-```bash
-# Development (with hot-reload via Nodemon)
-npm run dev
-```
-
-The server starts on the port defined in your `.env` file (default: `3000`).
+The server refuses to start if the environment is invalid or MongoDB is unreachable.
 
 ---
 
 ## Environment Variables
 
-| Variable     | Description                                    | Example                              |
-| ------------ | ---------------------------------------------- | ------------------------------------ |
-| `PORT`       | Port the server listens on                     | `3000`                               |
-| `MONGO_URI`  | MongoDB connection string                      | `mongodb+srv://user:pass@host/db`    |
-| `JWT_SECRET` | Secret key for signing/verifying JWT tokens    | A long random string                 |
+Empty values fall back to the defaults.
+
+| Variable          | Required | Default                                         | Description |
+| ----------------- | -------- | ----------------------------------------------- | ----------- |
+| `MONGO_URI`       | yes      |                                                 | MongoDB connection string |
+| `JWT_SECRET`      | yes      |                                                 | At least 32 characters |
+| `PORT`            | no       | `3000`                                          | Listen port |
+| `CLIENT_ORIGIN`   | no       | `http://localhost:5173,http://127.0.0.1:5173`   | Comma-separated origins allowed by CORS. Add your LAN URL to test on a phone. |
+| `UPLOAD_DIR`      | no       | `backend/uploads`                               | Where uploads are stored and served from |
+| `AUTH_RATE_LIMIT` | no       | `20`                                            | Login/register attempts per IP per 15 minutes |
+
+---
+
+## Responses and Errors
+
+Success responses keep the original shape:
+
+```json
+{ "success": true, "message": "...", "data": { } }
+```
+
+Every error, from any route, has one shape and never includes stack traces:
+
+```json
+{ "error": { "code": "VALIDATION_ERROR", "message": "email: Enter a valid email" } }
+```
+
+| Status | Codes |
+| ------ | ----- |
+| 400 | `VALIDATION_ERROR`, `INVALID_JSON`, `EMPTY_POST`, `FILE_REQUIRED`, `UNSUPPORTED_FILE`, `UPLOAD_ERROR`, `INVALID_REQUEST` |
+| 401 | `UNAUTHENTICATED`, `INVALID_CREDENTIALS` |
+| 403 | `FORBIDDEN` |
+| 404 | `NOT_FOUND` |
+| 409 | `ACCOUNT_EXISTS`, `REQUEST_EXISTS`, `ALREADY_CONNECTED`, `ALREADY_RESPONDED`, `CONFLICT` |
+| 413 | `FILE_TOO_LARGE`, `PAYLOAD_TOO_LARGE` |
+| 429 | `RATE_LIMITED` |
+| 500 | `INTERNAL_ERROR` |
+
+All bodies and query strings are validated with **strict** schemas (`schemas.js`): unknown keys are rejected with `400`.
 
 ---
 
 ## API Reference
 
-All responses follow a consistent shape:
-
-```json
-{
-  "success": true | false,
-  "message": "...",
-  "data": { ... }      // present on success where applicable
-}
-```
+🔒 = requires `Authorization: Bearer <token>`.
 
 ### Authentication
 
-#### `POST /register`
+| Endpoint | Body | Success | Notes |
+| --- | --- | --- | --- |
+| `POST /register` | `name`, `username` (3–30 of `A-Z a-z 0-9 _ .`), `email`, `password` (8–72) | `201` | `409 ACCOUNT_EXISTS` if the email or username is taken. Rate limited. |
+| `POST /login` | `email`, `password` | `200`, `data.token` (JWT, 7 days) | Same `401 INVALID_CREDENTIALS` for an unknown email or a wrong password. Rate limited. |
 
-Create a new user account. A blank profile is automatically created alongside the user.
+### User and profile
 
-| Field      | Type   | Required |
-| ---------- | ------ | -------- |
-| `name`     | string | ✅       |
-| `username` | string | ✅       |
-| `email`    | string | ✅       |
-| `password` | string | ✅       |
-
-**Responses:** `200` success · `400` missing fields · `409` user already exists
-
-#### `POST /login`
-
-Authenticate and receive a JWT token (valid for 7 days).
-
-| Field      | Type   | Required |
-| ---------- | ------ | -------- |
-| `email`    | string | ✅       |
-| `password` | string | ✅       |
-
-**Response data:**
-```json
-{ "message": "login successful", "token": "<jwt>" }
-```
-
-**Responses:** `200` success · `400` missing fields · `404` user not found · `401` wrong password
-
----
-
-### User & Profile
-
-> 🔒 All endpoints below require the `Authorization: Bearer <token>` header.
-
-#### `GET /get_user_and_profile`
-
-Returns the authenticated user's account details and full profile.
-
-#### `POST /user_update`
-
-Update account fields (name, username, email). Validates uniqueness of username/email.
-
-| Field      | Type   |
-| ---------- | ------ |
-| `name`     | string |
-| `username` | string |
-| `email`    | string |
-
-#### `POST /update_profile_data`
-
-Update professional profile (bio, headline, work history, education).
-
-| Field         | Type     |
-| ------------- | -------- |
-| `bio`         | string   |
-| `currentPost` | string   |
-| `pastWork`    | array    |
-| `education`   | array    |
-
-#### `POST /update_profile_picture`
-
-Upload a profile picture. Send as `multipart/form-data` with a `profile_picture` file field.
-
-#### `GET /user/get_all_users`
-
-Returns all user profiles (used for the connections/suggestions feature).
-
-#### `GET /user/download_resume?id=<profileId>`
-
-Generates a PDF résumé from the user's profile data and returns the download path.
-
----
+| Endpoint | Input | Notes |
+| --- | --- | --- |
+| `GET /get_user_and_profile` 🔒 | | Your user and profile, including your email. Never the password. |
+| `POST /user_update` 🔒 | any of `name`, `username`, `email` | `409` if the username or email belongs to someone else. |
+| `POST /update_profile_data` 🔒 | any of `bio`, `currentPost`, `pastWork[]`, `education[]` | Array items: `{ company, position, years }` / `{ school, degree, fieldOfStudy }`. |
+| `POST /update_profile_picture` 🔒 | multipart `profile_picture` (JPEG, PNG, WebP, GIF, max 5 MB) | Replaces and deletes the previous picture. |
+| `GET /user/get_all_users` 🔒 | | All profiles with `name`, `username`, `profilePicture`. No emails. |
+| `GET /user/download_resume?id=<profileId>` 🔒 | | Streams `application/pdf` as an attachment. Your email appears only on your own résumé. |
 
 ### Posts
 
-#### `GET /get_all_posts` *(public)*
-
-Returns all posts, populated with author info (`name`, `username`, `profilePicture`).
-
-#### `POST /post` 🔒
-
-Create a new post. Send as `multipart/form-data`.
-
-| Field   | Type   | Required | Description                  |
-| ------- | ------ | -------- | ---------------------------- |
-| `body`  | string | ✅       | Post text content            |
-| `media` | file   | ❌       | Image or video attachment    |
-
-#### `POST /delete_post` 🔒
-
-Delete a post (only the author can delete their own post).
-
-| Field    | Type   | Required |
-| -------- | ------ | -------- |
-| `postId` | string | ✅       |
-
-#### `POST /increment_likes` 🔒
-
-Like a post (idempotent — won't double-like).
-
-| Field    | Type   | Required |
-| -------- | ------ | -------- |
-| `postId` | string | ✅       |
-
-#### `POST /decrement_likes` 🔒
-
-Remove a like from a post.
-
-| Field    | Type   | Required |
-| -------- | ------ | -------- |
-| `postId` | string | ✅       |
-
----
+| Endpoint | Input | Notes |
+| --- | --- | --- |
+| `GET /get_all_posts` | optional `limit` (1–100), `before` (ISO date) | Newest first, with `commentCount`. Without `limit`, returns every post. |
+| `POST /post` 🔒 | multipart `body` (max 5000) and/or `media` (images, MP4, WebM, MOV, max 25 MB) | `201`. Text or media is required. `fileType` stores the full MIME type. |
+| `POST /delete_post` 🔒 | `postId` | Owner only (`403` otherwise). Also deletes its comments and media file. |
+| `POST /increment_likes` 🔒 | `postId` | Idempotent. |
+| `POST /decrement_likes` 🔒 | `postId` | |
 
 ### Comments
 
-#### `GET /get_comment?postId=<id>` *(public)*
-
-Returns all comments for a specific post, populated with author info.
-
-#### `POST /comment_post` 🔒
-
-Add a comment to a post.
-
-| Field         | Type   | Required |
-| ------------- | ------ | -------- |
-| `postId`      | string | ✅       |
-| `commentBody` | string | ✅       |
-
-#### `POST /delete_comment_of_user` 🔒
-
-Delete a comment (only the comment author can delete it).
-
-| Field       | Type   | Required |
-| ----------- | ------ | -------- |
-| `commentId` | string | ✅       |
-
----
+| Endpoint | Input | Notes |
+| --- | --- | --- |
+| `GET /get_comment?postId=<id>` | | Oldest first, with author `name`, `username`, `profilePicture`. |
+| `POST /comment_post` 🔒 | `postId`, `commentBody` (max 1000) | `201`. |
+| `POST /delete_comment_of_user` 🔒 | `commentId` | Author only. |
 
 ### Connections
 
-#### `POST /user/send_connection_request` 🔒
-
-Send a connection request to another user.
-
-| Field        | Type   | Required |
-| ------------ | ------ | -------- |
-| `receiverId` | string | ✅       |
-
-#### `GET /user/get_connection_request` 🔒
-
-Returns all connection requests **sent by** the authenticated user.
-
-#### `GET /user/user_connection_request` 🔒
-
-Returns all connection requests **received by** the authenticated user.
-
-#### `POST /user/accept_connection_request` 🔒
-
-Accept or reject a received connection request (only the recipient can act).
-
-| Field          | Type   | Required | Values              |
-| -------------- | ------ | -------- | ------------------- |
-| `connectionId` | string | ✅       | The request `_id`   |
-| `action_type`  | string | ✅       | `"accept"` or `"reject"` |
+| Endpoint | Input | Notes |
+| --- | --- | --- |
+| `POST /user/send_connection_request` 🔒 | `receiverId` | `201` new request. If they already asked you (pending or ignored), you're connected instead (`200`, `message: "connected"`). `400` for yourself, `409` duplicates. |
+| `GET /user/get_connection_request` 🔒 | | Requests you sent. |
+| `GET /user/user_connection_request` 🔒 | | Requests you received. |
+| `POST /user/accept_connection_request` 🔒 | `connectionId`, `action_type` (`accept` / `reject`) | Recipient only, once (`409 ALREADY_RESPONDED`). |
 
 ---
 
 ## Database Models
 
-### User
-
-| Field            | Type     | Notes                    |
-| ---------------- | -------- | ------------------------ |
-| `name`           | String   | Required                 |
-| `username`       | String   | Required, unique         |
-| `email`          | String   | Required, unique         |
-| `password`       | String   | Hashed with bcrypt       |
-| `profilePicture` | String   | Defaults to `default.jpg`|
-| `active`         | Boolean  | Defaults to `true`       |
-| `createdAt`      | Date     | Auto-generated           |
-
-### Profile
-
-| Field         | Type       | Notes                           |
-| ------------- | ---------- | ------------------------------- |
-| `userId`      | ObjectId   | References `User`               |
-| `bio`         | String     | Short biography                 |
-| `currentPost` | String     | Current job title / headline    |
-| `pastWork`    | [Object]   | `{ company, position, years }`  |
-| `education`   | [Object]   | `{ school, degree, fieldOfStudy }` |
-
-### Post
-
-| Field       | Type       | Notes                                |
-| ----------- | ---------- | ------------------------------------ |
-| `userId`    | ObjectId   | References `User`                    |
-| `body`      | String     | Required                             |
-| `likes`     | Number     | Derived from `likedBy.length`        |
-| `likedBy`   | [ObjectId] | Users who liked the post             |
-| `media`     | String     | Uploaded file name                   |
-| `fileType`  | String     | MIME subtype (e.g., `jpeg`, `mp4`)   |
-| `active`    | Boolean    | Soft-delete flag                     |
-| `createdAt` | Date       | Auto-generated                       |
-
-### Comment
-
-| Field    | Type     | Notes             |
-| -------- | -------- | ----------------- |
-| `userId` | ObjectId | References `User` |
-| `postId` | ObjectId | References `Post` |
-| `body`   | String   | Required          |
-
-### ConnectionRequest
-
-| Field             | Type     | Notes                                    |
-| ----------------- | -------- | ---------------------------------------- |
-| `userId`          | ObjectId | Sender — references `User`               |
-| `connectionId`    | ObjectId | Receiver — references `User`             |
-| `status_accepted` | Boolean  | `null` = pending, `true` = accepted, `false` = rejected |
+| Model | Fields |
+| --- | --- |
+| User | `name`, `username` (unique), `email` (unique), `password` (bcrypt, `select: false`), `profilePicture`, `active`, `createdAt` |
+| Profile | `userId`, `bio`, `currentPost`, `pastWork[]`, `education[]` |
+| Post | `userId`, `body` (optional), `likes`, `likedBy[]`, `media`, `fileType` (full MIME type; older posts hold only the subtype), `active`, `createdAt` |
+| Comment | `userId`, `postId`, `body` |
+| ConnectionRequest | `userId` (sender), `connectionId` (receiver), `status_accepted` (`null` pending, `true` accepted, `false` ignored) |
 
 ---
 
-## Authentication Flow
+## Security
 
-1. User registers via `POST /register` → password is hashed with **bcrypt** (10 salt rounds).
-2. User logs in via `POST /login` → server returns a **JWT** signed with `JWT_SECRET`, valid for **7 days**.
-3. For protected routes, the client sends `Authorization: Bearer <token>`.
-4. The `authMiddleware` verifies the token and injects `req.userId` for downstream handlers.
-5. Tokens are **never** read from query strings or request bodies — only from the `Authorization` header.
+- Passwords are hashed with bcrypt and excluded from every query and every JSON response.
+- Login compares against a dummy hash for unknown emails, so response timing doesn't reveal accounts.
+- Strict Zod validation on every input, plus Mongoose `sanitizeFilter` as a second layer against operator injection.
+- `/login` and `/register` are rate limited per IP.
+- CORS only allows `CLIENT_ORIGIN`.
+- JWTs are verified with HS256 only and read only from the `Authorization` header.
+- Known gap: the frontend keeps the JWT in `localStorage`. Moving to httpOnly cookies is deferred.
 
 ---
 
 ## File Uploads
 
-- All uploads are stored in the `uploads/` directory using **Multer disk storage**.
-- The `uploads/` folder is served as a static directory, so files are accessible at `http://localhost:<PORT>/<filename>`.
-- Supported for: profile pictures (`image/*`) and post media (`image/*`, `video/*`).
-- Files are saved with their **original filename**.
+- Stored in `UPLOAD_DIR` under server-generated names (`<uuid>.<ext>`). The extension comes from the allowed MIME type, never from the client's filename.
+- Served statically with `X-Content-Type-Options: nosniff`.
+- A failed request deletes the file it uploaded. Replaced avatars and deleted posts delete their files. Files from before this change (original names) are never auto-deleted, since several users may share one.
+
+---
+
+## Testing
+
+Tests need a local `mongod`. They use the `nexora_test` database and a temp upload folder, and drop both afterwards; your dev data is never touched.
+
+```bash
+npm test
+```
 
 ---
 
 ## Scripts
 
-| Script      | Command            | Description                       |
-| ----------- | ------------------ | --------------------------------- |
-| `dev`       | `npm run dev`      | Start dev server with Nodemon     |
-| `test`      | `npm test`         | Placeholder (not yet configured)  |
+| Script | Description |
+| --- | --- |
+| `npm run dev` | Start with `node --watch` |
+| `npm start` | Start once |
+| `npm test` | Vitest + Supertest suite |
 
 ---
 
 ## Author
 
 **Akash Shrivastav**
-
----
 
 ## License
 

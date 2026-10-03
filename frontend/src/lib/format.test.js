@@ -29,7 +29,10 @@ describe('initials', () => {
 });
 
 describe('isVideo', () => {
-  it('matches the subtypes the API stores, including quicktime for .mov', () => {
+  it('matches full MIME types and the subtypes older posts stored', () => {
+    expect(isVideo({ fileType: 'video/mp4' })).toBe(true);
+    expect(isVideo({ fileType: 'video/quicktime' })).toBe(true);
+    expect(isVideo({ fileType: 'image/png' })).toBe(false);
     expect(isVideo({ fileType: 'mp4' })).toBe(true);
     expect(isVideo({ fileType: 'quicktime' })).toBe(true);
     expect(isVideo({ fileType: 'jpeg' })).toBe(false);

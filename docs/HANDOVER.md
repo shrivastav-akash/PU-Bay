@@ -2,64 +2,72 @@
 
 _Last updated: 2026-10-03, branch `redesign/nexora`._
 
-## What changed (Phase A: rebrand and redesign, frontend only)
+## Status
 
-- Rebranded PU-Bay to **Nexora**: new logo mark (two offset cards, coral front card), wordmark, favicon, title and meta tags, and all UI copy.
-- Rebuilt the frontend on Tailwind v4 + shadcn/ui (Radix, JS) + Motion + React Router 8 + next-themes. Design rules are in `DESIGN.md`.
-- Replaced the single 645-line `App.jsx` with routed pages: Landing, Login, Signup, Feed, People, Network, Profile (`/u/:username`), Settings, NotFound.
-- New: a spring-physics swipe deck with a finite end state, a comments sheet/drawer (with delete own comment), a composer dialog with media preview, a delete confirmation dialog, People search, Network tabs, dark/light/system theme, deep links, and skeleton/empty/error states everywhere.
-- Fixed in passing (frontend): the "Panjab University" headline fallback, placeholder-only labels, modals without focus management, the JS `isMobile` listener, and the share action that claimed to copy a link.
-- Added Vitest with tests for `lib/connections.js`, `lib/format.js` and `lib/swipe.js` (`npm test`).
-- `backend/` is untouched.
+- **Phase A (rebrand + frontend redesign)** is committed as `1b9e2c5`. Design rules are in `DESIGN.md`.
+- **Phase B (backend security and bug fixes)** is done but **uncommitted**. Details below.
+
+## What changed in Phase B
+
+Backend structure:
+- `app.js` (Express app) split from `server.js` (connect, then listen; exit if MongoDB is unreachable).
+- `config/env.js` validates env with Zod at startup.
+- `schemas.js` holds strict Zod schemas for every body and query; `middleware/validate.js` puts parsed values in `req.valid`.
+- `middleware/error.js` is the single error handler: `{ error: { code, message } }`, no stack traces, deletes a just-uploaded file if the request fails.
+- `lib/uploads.js` holds the multer configs; `middleware/rate-limit.js` the auth limiter.
+
+Fixed (numbers match the old catalog):
+1. Password hash never returned (`select: false` + `toJSON` transform).
+2. Mass assignment closed: strict schemas whitelist fields.
+3. Zod on every input + `sanitizeFilter`.
+4. Login gives a generic 401 with timing equalised by a dummy hash. Register keeps `409 "Email or username already in use"` (your choice).
+5. `/login` and `/register` rate limited (20 per IP per 15 min, `AUTH_RATE_LIMIT`).
+6. Uploads get server-side UUID names, a MIME allowlist, and size limits (5 MB avatars, 25 MB post media); served with `nosniff`.
+7. Résumé PDF streamed in the response; nothing is written to `uploads/`. Email is printed only on your own résumé.
+8. Other users' emails removed from every list endpoint.
+9. CORS restricted to `CLIENT_ORIGIN` (default: Vite dev server).
+10. `uploads/*` git-ignored (`.gitkeep` kept). **You still need to run** `git rm -r --cached backend/uploads` and then `git add backend/uploads/.gitkeep`.
+11. Env validated at startup; server exits when the DB is unreachable.
+12. PDF works without a photo, lists work/education properly, and returns 400/404 for bad ids.
+13. Media-only posts allowed (text or media required).
+14. `fileType` stores the full MIME type; frontend `isVideo` handles both formats.
+15. Avatar upload without a file returns 400.
+16. Duplicate username returns 409 (and any E11000 maps to 409).
+17. No self requests or duplicates; asking someone who asked you first connects you.
+18. Deleting a post removes its comments and media file; non-owners get 403.
+19. `get_comment` reads only the query string.
+20. Feed sorted on the server, with `commentCount` (one aggregate query) and opt-in `limit`/`before` paging.
+21. Upload path no longer depends on the working directory (`UPLOAD_DIR`).
+22. One error middleware and shape; `frontend/src/lib/api.js` updated.
+23. Removed unused `crypto` and `pdf-creator-node`; replaced `nodemon` with `node --watch`. `npm audit`: 0 vulnerabilities.
+24. Dead `activeCheck` export and duplicate model import removed.
+25. 33 backend tests (Vitest + Supertest), checked with injected bugs to confirm they fail.
+
+Frontend follow-ups:
+- `api.js`: reads the new error shape; `downloadFile()` for the streamed PDF.
+- Composer: media-only posts.
+- Comment counts on cards, kept in step when you comment or delete.
+- Connect toast says "connected" when asking back.
 
 ## Verified
 
-- `npm run lint`, `npm test` (16 passing), `npm run build` all clean.
-- Driven in the browser against the local API: sign up, login and redirect back to a deep link, logout, swipe by drag, buttons and keys, like/unlike, comment add/delete, composer with an image, post delete, accept a connection, People, Profile tabs, Settings save, light/dark, and the 375 / 768 / 1024 / 1440 widths.
+- Backend `npm test`: 33 passing. `npm audit`: 0 vulnerabilities.
+- Frontend `npm run lint`, `npm test` (16), `npm run build` all clean.
+- Manual end-to-end against the dev DB:
+  - duplicate signup and wrong-password messages
+  - media-only post
+  - comment count update
+  - PDF download for a user with no photo
+  - CORS blocks foreign origins
+- The temporary test user was removed afterwards.
 
-## Known issues
+## Known issues / deferred
 
-- JS bundle is about 683 kB (212 kB gzip) in one chunk. Not optimised yet: measure with Lighthouse first, then route-split with `React.lazy` if the numbers call for it.
-- Résumé PDF fails for users without a profile photo (backend bug, item 12 below). The UI shows an error toast.
-- Media-only posts are blocked in the composer because the backend requires text (item 13).
-- The comment count is not shown on cards: the API does not return it (item 20).
-
-## Pending: Phase B (backend and security fixes)
-
-Do **not** start until the user says so. New backend dependencies need approval at that time (zod, express-rate-limit, vitest, supertest).
-
-Security:
-1. Password hash returned by `/get_user_and_profile`.
-2. Mass assignment in `updateUserProfile` / `updateProfileData` (`Object.assign(req.body)`).
-3. No input validation; NoSQL operator injection possible. Add Zod + `sanitizeFilter`.
-4. Login reveals whether an account exists (404 vs 401).
-5. No rate limiting on auth routes.
-6. Multer keeps `originalname`: uploads overwrite each other; no size/type limits.
-7. Résumé PDFs land in public `uploads/` with emails and are never deleted. Stream them instead.
-8. `/user/get_all_users` exposes every email.
-9. CORS open to all origins.
-10. User uploads committed to git (~18 MB in `backend/uploads/`).
-11. No env validation; server keeps running when the DB connection fails.
-
-Bugs:
-12. PDF: crashes on `default.jpg`, prints `[object Object]`, 500 instead of 404 on a bad id.
-13. Media-only posts fail (`body` is required).
-14. `fileType` stores the MIME subtype (`.mov` becomes `quicktime`).
-15. Avatar upload without a file throws 500.
-16. Duplicate username on register gives 500 instead of 409.
-17. Self connection requests and duplicate reverse requests allowed.
-18. `deletePost` leaves comments and media behind; returns 401 instead of 403 for non-owners.
-19. `get_comment` reads `req.body` on GET.
-20. No server sort, pagination or comment counts on posts.
-21. `uploads` path depends on the working directory.
-22. No central error middleware; inconsistent error shape.
-
-Hygiene:
-23. Unused `crypto` and `pdf-creator-node` deps (most audit vulnerabilities); `nodemon` belongs in devDependencies.
-24. Dead `activeCheck` export; duplicate model import alias.
-25. No backend tests.
-26. JWT lives in localStorage (noted; httpOnly cookies deferred).
+- 26: the JWT is kept in `localStorage` (readable by XSS). Moving to httpOnly cookies needs auth changes on both sides; not started.
+- Rate limiter uses an in-memory store (single process). Needs a shared store if the API ever runs on several instances.
+- The frontend bundle is about 683 kB in one chunk; measure with Lighthouse before route-splitting.
+- Legacy uploads (original filenames) are never auto-deleted, since several users may share one file.
 
 ## Next step
 
-User reviews the redesign on `redesign/nexora` and commits. Then, on request, start Phase B from item 1.
+Review the Phase B diff, untrack `backend/uploads` (command in item 10), and commit.

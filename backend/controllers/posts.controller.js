@@ -1,183 +1,106 @@
+import mongoose from "mongoose";
 import Post from "../models/posts.model.js";
 import Comment from "../models/comments.model.js";
+import { HttpError } from "../lib/http-error.js";
+import { removeUpload } from "../lib/uploads.js";
+
+// Express 5 forwards rejected promises to the error middleware, so handlers
+// throw HttpError instead of wrapping themselves in try/catch.
+
+const PUBLIC_USER = "name username profilePicture";
+
+async function findPostOr404(postId) {
+  const post = await Post.findById(postId);
+  if (!post) throw new HttpError(404, "NOT_FOUND", "Post does not exist");
+  return post;
+}
 
 export const createPost = async (req, res) => {
-  try {
-    const post = new Post({
-      userId: req.userId,
-      body: req.body.body,
-      media: req.file != undefined ? req.file.filename : "",
-      fileType: req.file != undefined ? req.file.mimetype.split("/")[1] : "",
-    });
-
-    await post.save();
-    res
-      .status(200)
-      .json({ success: true, message: "post created successfully" });
-    return;
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "something went wrong" });
-    return;
+  const { body } = req.valid.body;
+  if (!body && !req.file) {
+    throw new HttpError(400, "EMPTY_POST", "Write something or attach a photo or video");
   }
+  await Post.create({
+    userId: req.userId,
+    body,
+    media: req.file?.filename ?? "",
+    fileType: req.file?.mimetype ?? "",
+  });
+  res.status(201).json({ success: true, message: "post created successfully" });
 };
 
+// Newest first. Without `limit` every post is returned (the feed deck needs
+// them all today); `limit` + `before` give cursor pagination when needed.
 export const getAllPosts = async (req, res) => {
-  try {
-    const posts = await Post.find().populate(
-      "userId",
-      "name username profilePicture",
-    );
-    res.status(200).json({ success: true, data: posts });
-    return;
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "something went wrong" });
-    return;
-  }
+  const { limit, before } = req.valid.query;
+  const filter = before ? { createdAt: mongoose.trusted({ $lt: before }) } : {};
+  let query = Post.find(filter).sort({ createdAt: -1 }).populate("userId", PUBLIC_USER).lean();
+  if (limit) query = query.limit(limit);
+  const posts = await query;
+
+  // One grouped count for the whole page instead of a query per post.
+  const counts = await Comment.aggregate([
+    { $match: { postId: { $in: posts.map((p) => p._id) } } },
+    { $group: { _id: "$postId", count: { $sum: 1 } } },
+  ]);
+  const byPost = new Map(counts.map((c) => [String(c._id), c.count]));
+  const data = posts.map((p) => ({ ...p, commentCount: byPost.get(String(p._id)) ?? 0 }));
+  res.status(200).json({ success: true, data });
 };
 
 export const deletePost = async (req, res) => {
-  try {
-    const { postId } = req.body;
-    const post = await Post.findOne({ _id: postId });
-    if (!post) {
-      res.status(404).json({ success: false, message: "post does not exist" });
-      return;
-    }
-    if (post.userId.toString() !== req.userId) {
-      res.status(401).json({ success: false, message: "unauthorized" });
-      return;
-    }
-    await Post.deleteOne({ _id: postId });
-    res
-      .status(200)
-      .json({ success: true, message: "post deleted successfully" });
-    return;
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "something went wrong" });
-    return;
+  const post = await findPostOr404(req.valid.body.postId);
+  if (!post.userId.equals(req.userId)) {
+    throw new HttpError(403, "FORBIDDEN", "You can only delete your own posts");
   }
+  await Promise.all([
+    Post.deleteOne({ _id: post._id }),
+    Comment.deleteMany({ postId: post._id }),
+  ]);
+  removeUpload(post.media);
+  res.status(200).json({ success: true, message: "post deleted successfully" });
 };
 
 export const commentPost = async (req, res) => {
-  try {
-    const { postId, commentBody } = req.body;
-    const post = await Post.findOne({ _id: postId });
-    if (!post) {
-      res.status(404).json({ success: false, message: "post does not exist" });
-      return;
-    }
-    const comment = new Comment({
-      userId: req.userId,
-      postId: post._id,
-      body: commentBody,
-    });
-    await comment.save();
-    res
-      .status(200)
-      .json({ success: true, message: "comment added successfully" });
-    return;
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "something went wrong" });
-    return;
-  }
+  const { postId, commentBody } = req.valid.body;
+  const post = await findPostOr404(postId);
+  await Comment.create({ userId: req.userId, postId: post._id, body: commentBody });
+  res.status(201).json({ success: true, message: "comment added successfully" });
 };
 
 export const get_comment_by_post = async (req, res) => {
-  try {
-    const postId = req.query.postId || req.body.postId;
-    const comments = await Comment.find({ postId }).populate(
-      "userId",
-      "name username profilePicture",
-    );
-    res.status(200).json({ success: true, data: comments });
-    return;
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "something went wrong" });
-    return;
-  }
+  const comments = await Comment.find({ postId: req.valid.query.postId })
+    .sort({ _id: 1 })
+    .populate("userId", PUBLIC_USER);
+  res.status(200).json({ success: true, data: comments });
 };
 
 export const delete_comment_of_user = async (req, res) => {
-  try {
-    const { commentId } = req.body;
-    const comment = await Comment.findOne({ _id: commentId });
-    if (!comment) {
-      res
-        .status(404)
-        .json({ success: false, message: "comment does not exist" });
-      return;
-    }
-    if (comment.userId.toString() !== req.userId) {
-      res.status(403).json({ success: false, message: "unauthorized" });
-      return;
-    }
-    await Comment.deleteOne({ _id: commentId });
-    res
-      .status(200)
-      .json({ success: true, message: "comment deleted successfully" });
-    return;
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "something went wrong" });
-    return;
+  const comment = await Comment.findById(req.valid.body.commentId);
+  if (!comment) throw new HttpError(404, "NOT_FOUND", "Comment does not exist");
+  if (!comment.userId.equals(req.userId)) {
+    throw new HttpError(403, "FORBIDDEN", "You can only delete your own comments");
   }
+  await Comment.deleteOne({ _id: comment._id });
+  res.status(200).json({ success: true, message: "comment deleted successfully" });
 };
 
 export const increment_likes = async (req, res) => {
-  try {
-    const { postId } = req.body;
-    const post = await Post.findOne({ _id: postId });
-    if (!post) {
-      res.status(404).json({ success: false, message: "post does not exist" });
-      return;
-    }
-    const alreadyLiked = post.likedBy.some(
-      (id) => id.toString() === req.userId,
-    );
-    if (!alreadyLiked) {
-      post.likedBy.push(req.userId);
-      post.likes = post.likedBy.length;
-      await post.save();
-    }
-    res.status(200).json({ success: true, message: "like added successfully" });
-    return;
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "something went wrong" });
-    return;
+  const post = await findPostOr404(req.valid.body.postId);
+  if (!post.likedBy.some((id) => id.equals(req.userId))) {
+    post.likedBy.push(req.userId);
+    post.likes = post.likedBy.length;
+    await post.save();
   }
+  res.status(200).json({ success: true, message: "like added successfully" });
 };
 
 export const decrement_likes = async (req, res) => {
-  try {
-    const { postId } = req.body;
-    const post = await Post.findOne({ _id: postId });
-    if (!post) {
-      res.status(404).json({ success: false, message: "post does not exist" });
-      return;
-    }
-    const wasLiked = post.likedBy.some(
-      (id) => id.toString() === req.userId,
-    );
-    if (wasLiked) {
-      post.likedBy = post.likedBy.filter(
-        (id) => id.toString() !== req.userId,
-      );
-      post.likes = post.likedBy.length;
-      await post.save();
-    }
-    res
-      .status(200)
-      .json({ success: true, message: "like removed successfully" });
-    return;
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "something went wrong" });
-    return;
+  const post = await findPostOr404(req.valid.body.postId);
+  if (post.likedBy.some((id) => id.equals(req.userId))) {
+    post.likedBy = post.likedBy.filter((id) => !id.equals(req.userId));
+    post.likes = post.likedBy.length;
+    await post.save();
   }
+  res.status(200).json({ success: true, message: "like removed successfully" });
 };

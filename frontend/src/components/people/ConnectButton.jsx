@@ -18,8 +18,8 @@ export default function ConnectButton({ userId, name, size = 'sm', compact = fal
   const run = async (fn, done) => {
     setBusy(true);
     try {
-      await fn();
-      toast.success(done);
+      const result = await fn();
+      toast.success(typeof done === 'function' ? done(result) : done);
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -61,7 +61,7 @@ export default function ConnectButton({ userId, name, size = 'sm', compact = fal
       );
     default:
       return (
-        <Button size={size} variant="outline" disabled={busy} className={className} onClick={() => run(() => sendRequest(userId), `Request sent to ${first}`)}>
+        <Button size={size} variant="outline" disabled={busy} className={className} onClick={() => run(() => sendRequest(userId), (r) => (r?.message === 'connected' ? `You and ${first} are connected` : `Request sent to ${first}`))}>
           {busy ? <Spinner data-icon="inline-start" /> : <UserPlus data-icon="inline-start" />}
           Connect
         </Button>

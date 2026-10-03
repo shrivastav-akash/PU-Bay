@@ -50,7 +50,10 @@ export default function CommentsPanel({ post, open, onOpenChange }) {
 }
 
 function Thread({ post }) {
-  const { token, meId } = useData();
+  const { token, meId, posts } = useData();
+  // Keeps the count on the feed card in step without refetching every post.
+  const bumpCount = (delta) =>
+    posts.setData((list) => list?.map((p) => (p._id === post._id ? { ...p, commentCount: Math.max(0, (p.commentCount || 0) + delta) } : p)));
   const load = useCallback(() => api(`/get_comment?postId=${encodeURIComponent(post._id)}`), [post._id]);
   const comments = useLoader(load);
   const [draft, setDraft] = useState('');
@@ -65,6 +68,7 @@ function Thread({ post }) {
     try {
       await api('/comment_post', { method: 'POST', body: { postId: post._id, commentBody: body }, token });
       setDraft('');
+      bumpCount(1);
       await comments.reload();
     } catch (err) {
       toast.error(err.message);
@@ -77,6 +81,7 @@ function Thread({ post }) {
     setRemoving(commentId);
     try {
       await api('/delete_comment_of_user', { method: 'POST', body: { commentId }, token });
+      bumpCount(-1);
       await comments.reload();
       toast.success('Comment deleted');
     } catch (err) {

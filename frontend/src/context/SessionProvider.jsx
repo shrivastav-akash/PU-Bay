@@ -85,8 +85,9 @@ function DataProvider({ token, logout, children }) {
   }, [meId, setLiked, token]);
 
   const sendRequest = useCallback(async (receiverId) => {
-    await api('/user/send_connection_request', { method: 'POST', body: { receiverId }, token });
+    const result = await api('/user/send_connection_request', { method: 'POST', body: { receiverId }, token });
     await reloadRequests();
+    return result;
   }, [token, reloadRequests]);
 
   const respondRequest = useCallback(async (requestId, accept) => {

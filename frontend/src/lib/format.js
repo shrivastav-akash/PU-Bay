@@ -21,6 +21,8 @@ export function initials(name) {
   return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
 }
 
+// New posts store the full MIME type ("video/mp4"); older ones only the subtype.
 export function isVideo(post) {
-  return ['mp4', 'mov', 'quicktime', 'webm', 'avi', 'ogg'].includes(post?.fileType);
+  const type = post?.fileType || '';
+  return type.startsWith('video/') || ['mp4', 'mov', 'quicktime', 'webm', 'avi', 'ogg'].includes(type);
 }

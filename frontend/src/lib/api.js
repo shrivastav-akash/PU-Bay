@@ -21,8 +21,9 @@ export function writeToken(token) {
   }
 }
 
-// Every endpoint answers { success, message?, data? }. Callers get `data`
-// back, or an Error carrying the server message and HTTP status.
+// Success responses are { success, message?, data? }; errors are
+// { error: { code, message } }. Callers get `data` back, or an Error carrying
+// the server message, error code and HTTP status.
 export async function api(path, { method = 'GET', body, form, token } = {}) {
   const headers = {};
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -47,10 +48,31 @@ export async function api(path, { method = 'GET', body, form, token } = {}) {
   } catch {
     // Non-JSON error page; fall through to the generic message.
   }
-  if (!res.ok || !json?.success) {
-    throw Object.assign(new Error(json?.message || `Request failed (${res.status})`), { status: res.status });
+  if (!res.ok) {
+    throw Object.assign(new Error(json?.error?.message || `Request failed (${res.status})`), {
+      status: res.status,
+      code: json?.error?.code,
+    });
   }
   return json.data ?? json;
+}
+
+// For endpoints that stream a file (the résumé PDF): saves it via a temporary link.
+export async function downloadFile(path, { token, filename }) {
+  let res;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  } catch {
+    throw Object.assign(new Error('Could not reach the server. Check your connection.'), { status: 0 });
+  }
+  if (!res.ok) {
+    const json = await res.json().catch(() => null);
+    throw Object.assign(new Error(json?.error?.message || `Request failed (${res.status})`), { status: res.status });
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const link = Object.assign(document.createElement('a'), { href: url, download: filename });
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 export function mediaUrl(file) {

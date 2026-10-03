@@ -5,9 +5,10 @@ const PostSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
   },
+  // Optional: a post needs text or media (enforced in createPost).
   body: {
     type: String,
-    required: true,
+    default: "",
   },
   likes: {
     type: Number,
@@ -35,6 +36,7 @@ const PostSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
+  // Full MIME type, e.g. "video/mp4". Older posts hold only the subtype.
   fileType: {
     type: String,
     default: "",

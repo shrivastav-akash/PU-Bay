@@ -1,3 +1,7 @@
 node_modules
 .env
 api.http
+
+# User uploads are runtime data, not source.
+uploads/*
+!uploads/.gitkeep

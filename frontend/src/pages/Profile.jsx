@@ -14,7 +14,7 @@ import ConnectButton from '@/components/people/ConnectButton';
 import UserAvatar from '@/components/UserAvatar';
 import { LogoMark } from '@/components/brand/Logo';
 import { useData } from '@/context/session';
-import { api, mediaUrl } from '@/lib/api';
+import { downloadFile, mediaUrl } from '@/lib/api';
 import { fmtDate, isVideo } from '@/lib/format';
 
 export default function Profile() {
@@ -56,7 +56,7 @@ export default function Profile() {
               {own ? (
                 <>
                   <Button asChild variant="outline"><Link to="/settings"><PenLine data-icon="inline-start" />Edit profile</Link></Button>
-                  <ResumeButton profileId={profile._id} />
+                  <ResumeButton profileId={profile._id} username={user.username} />
                 </>
               ) : (
                 <ConnectButton userId={user._id} name={user.name} size="default" />
@@ -153,20 +153,18 @@ function ResumeSection({ icon: Icon, title, items = [], render, empty }) {
   );
 }
 
-function ResumeButton({ profileId }) {
+function ResumeButton({ profileId, username }) {
   const { token } = useData();
   const [busy, setBusy] = useState(false);
 
   const download = async () => {
-    // Open the tab inside the click so popup blockers allow it, then point it at the PDF.
-    const tab = window.open('', '_blank');
     setBusy(true);
     try {
-      const file = await api(`/user/download_resume?id=${encodeURIComponent(profileId)}`, { token });
-      if (tab) tab.location.href = mediaUrl(file);
-      else window.location.href = mediaUrl(file);
+      await downloadFile(`/user/download_resume?id=${encodeURIComponent(profileId)}`, {
+        token,
+        filename: `${username}-resume.pdf`,
+      });
     } catch (err) {
-      tab?.close();
       toast.error('Could not generate the PDF', { description: err.message });
     } finally {
       setBusy(false);

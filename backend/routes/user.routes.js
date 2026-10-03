@@ -13,40 +13,44 @@ import {
   getUserGotConnectionRequest,
   acceptConnectionRequest,
 } from "../controllers/user.controller.js";
-import multer from "multer";
 import authMiddleware from "../middleware/auth.js";
+import { authLimiter } from "../middleware/rate-limit.js";
+import { validate } from "../middleware/validate.js";
+import { avatarImage } from "../lib/uploads.js";
+import {
+  loginBody,
+  profileBody,
+  receiverBody,
+  registerBody,
+  respondBody,
+  resumeQuery,
+  userUpdateBody,
+} from "../schemas.js";
 
 const router = Router();
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads");
-  },
-  filename: (req, file, cb) => {
-    cb(null, file.originalname);
-  },
-});
-
-const upload = multer({
-  storage: storage,
-});
-
 // Public
-router.route("/register").post(register);
-router.route("/login").post(login);
+router.route("/register").post(authLimiter, validate({ body: registerBody }), register);
+router.route("/login").post(authLimiter, validate({ body: loginBody }), login);
 
 // Authenticated
 router
   .route("/update_profile_picture")
-  .post(authMiddleware, upload.single("profile_picture"), uploadProfilePicture);
-router.route("/user_update").post(authMiddleware, updateUserProfile);
-router.route("/update_profile_data").post(authMiddleware, updateProfileData);
+  .post(authMiddleware, avatarImage, uploadProfilePicture);
+router
+  .route("/user_update")
+  .post(authMiddleware, validate({ body: userUpdateBody }), updateUserProfile);
+router
+  .route("/update_profile_data")
+  .post(authMiddleware, validate({ body: profileBody }), updateProfileData);
 router.route("/get_user_and_profile").get(authMiddleware, getUserAndProfile);
 router.route("/user/get_all_users").get(authMiddleware, getAllUserProfile);
-router.route("/user/download_resume").get(authMiddleware, downloadProfile);
+router
+  .route("/user/download_resume")
+  .get(authMiddleware, validate({ query: resumeQuery }), downloadProfile);
 router
   .route("/user/send_connection_request")
-  .post(authMiddleware, sendConnectionRequest);
+  .post(authMiddleware, validate({ body: receiverBody }), sendConnectionRequest);
 router
   .route("/user/get_connection_request")
   .get(authMiddleware, getMyConnectionsRequest);
@@ -55,6 +59,6 @@ router
   .get(authMiddleware, getUserGotConnectionRequest);
 router
   .route("/user/accept_connection_request")
-  .post(authMiddleware, acceptConnectionRequest);
+  .post(authMiddleware, validate({ body: respondBody }), acceptConnectionRequest);
 
 export default router;
