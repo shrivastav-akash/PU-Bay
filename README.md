@@ -1,13 +1,13 @@
 <p align="center">
-  <strong>PU·Bay</strong><br/>
+  <strong>nexora</strong><br/>
   <em>Your campus, one swipe at a time.</em>
 </p>
 
 ---
 
-# PU-Bay
+# Nexora
 
-**PU-Bay** is a full-stack social networking platform built for **Presidency University** students. It combines a **swipeable card feed** (inspired by Tinder's UX), **résumé-style professional profiles**, and a **campus connection system** — all wrapped in a distinctive **neo-brutalist** design language.
+**Nexora** (formerly PU-Bay) is a full-stack social networking platform built for **Presidency University** students. It combines a **swipeable card feed**, **résumé-style professional profiles**, and a **campus connection system** in a clean, modern interface: neutral zinc, one coral accent, Geist type, light and dark themes.
 
 ---
 
@@ -41,9 +41,9 @@
 
 ## Overview
 
-PU-Bay solves a common problem on university campuses: students lack a dedicated, student-only platform to share updates, showcase their work, build professional profiles, and connect with peers across departments.
+Nexora solves a common problem on university campuses: students lack a dedicated, student-only platform to share updates, showcase their work, build professional profiles, and connect with peers across departments.
 
-**What makes PU-Bay different:**
+**What makes Nexora different:**
 - **Swipe-first feed** — Browse posts by dragging cards left (skip) or right (like), or use keyboard arrows.
 - **Résumé profiles** — Every student gets a recruiter-ready profile with work experience, education, and a downloadable PDF résumé.
 - **Connection requests** — Send, accept, or reject connection requests to build your campus network.
@@ -55,18 +55,18 @@ PU-Bay solves a common problem on university campuses: students lack a dedicated
 
 | Feature                         | Description                                                                |
 | ------------------------------- | -------------------------------------------------------------------------- |
-| 🃏 **Swipeable card feed**      | Tinder-style deck with drag gestures, keyboard arrows, and stacked cards   |
+| 🃏 **Swipeable card feed**      | Spring-physics deck: drag, Skip/Like buttons or ← →, with a finite end     |
 | 📝 **Rich posts**               | Text posts with image and video media attachments                          |
 | ❤️ **Likes**                    | Like/unlike posts with optimistic UI updates and per-user tracking         |
-| 💬 **Comments**                  | Inline comment threads on each post                                        |
+| 💬 **Comments**                  | Side sheet (desktop) or drawer (phone); delete your own comments          |
 | 📄 **Professional profiles**    | Bio, headline, work experience, education history                          |
 | 📥 **PDF résumé export**        | Generate and download a PDF résumé from any profile                        |
 | 🤝 **Campus connections**       | Send, accept, and reject connection requests                               |
-| 👥 **People suggestions**       | "People you may know" recommendations                                      |
-| 🌓 **Dark / Light mode**        | Theme toggle with localStorage persistence                                 |
-| 📱 **Fully responsive**         | Adaptive layouts for mobile (< 860px) and desktop                          |
+| 👥 **People directory**         | Searchable people page plus "People you may know" suggestions            |
+| 🌓 **Dark / Light / System**    | Follows the device by default, no flash on load                           |
+| 📱 **Fully responsive**         | Bottom tab bar on phones, icon rail on tablets, full rails on desktop      |
 | 🔐 **Secure authentication**    | bcrypt password hashing + JWT tokens in Authorization headers              |
-| 🎨 **Neo-brutalist design**     | Offset shadows, bold borders, editorial typography                         |
+| 🎨 **Modern design system**     | Tailwind v4 + shadcn/ui tokens, documented in `DESIGN.md`                  |
 | 🔔 **Toast notifications**      | Ephemeral feedback messages for user actions                               |
 | 📸 **Profile picture upload**   | Custom avatar with camera-icon upload overlay                              |
 
@@ -80,9 +80,14 @@ PU-Bay solves a common problem on university campuses: students lack a dedicated
 | ----------------------- | ------------------------------ |
 | React 19                | UI library                     |
 | Vite 8                  | Build tool & dev server        |
+| React Router 8          | Routes and deep links          |
+| Tailwind CSS v4         | Styling and design tokens      |
+| shadcn/ui (Radix)       | Accessible UI primitives       |
+| Motion                  | Swipe deck physics             |
+| next-themes, sonner     | Theme switching, toasts        |
 | Lucide React            | Icon library                   |
-| Vanilla CSS             | Custom design system (tokens)  |
-| Google Fonts            | Bricolage Grotesque + Hanken Grotesk |
+| Geist + Geist Mono      | Self-hosted variable fonts     |
+| Vitest                  | Unit tests                     |
 
 ### Backend
 
@@ -102,7 +107,7 @@ PU-Bay solves a common problem on university campuses: students lack a dedicated
 ## Project Structure
 
 ```
-PU-Bay/
+PU-Bay/   (repository folder)
 ├── backend/                           # Express API server
 │   ├── controllers/
 │   │   ├── posts.controller.js        # Post CRUD, likes, comments
@@ -125,25 +130,28 @@ PU-Bay/
 │   └── .gitignore
 │
 ├── frontend/                          # React SPA (Vite)
-│   ├── public/
-│   │   ├── favicon.svg
-│   │   └── icons.svg
+│   ├── public/favicon.svg             # Nexora mark
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── Auth.jsx               # Login / Register
-│   │   │   ├── Avatar.jsx             # User avatar (image or initial)
-│   │   │   ├── Navbar.jsx             # Top navigation bar
-│   │   │   ├── PostCard.jsx           # Swipeable post card
-│   │   │   └── ProfilePanel.jsx       # Profile side panel
-│   │   ├── App.jsx                    # Root component
-│   │   ├── config.js                  # API URL & auth helpers
-│   │   ├── index.css                  # Design system (tokens + utilities)
-│   │   └── main.jsx                   # React mount point
-│   ├── index.html
+│   │   │   ├── ui/                    # shadcn/ui primitives (generated)
+│   │   │   ├── brand/Logo.jsx         # Mark + wordmark
+│   │   │   ├── layout/                # AppShell, RightRail, AuthLayout, SiteFooter
+│   │   │   ├── feed/                  # SwipeDeck, PostCard, CommentsPanel, Composer
+│   │   │   ├── people/ConnectButton.jsx
+│   │   │   ├── UserAvatar.jsx, ErrorBoundary.jsx, LoadError.jsx
+│   │   ├── context/                   # Session (auth + data) providers and hooks
+│   │   ├── lib/                       # api, connections, format, swipe (+ tests)
+│   │   ├── pages/                     # One file per route
+│   │   ├── App.jsx                    # Routes and auth guards
+│   │   ├── index.css                  # Tailwind + design tokens
+│   │   └── main.jsx                   # Providers and mount
+│   ├── components.json                # shadcn config
 │   ├── vite.config.js
-│   ├── package.json
-│   └── .gitignore
+│   └── package.json
 │
+├── CLAUDE.md                          # Project spec for AI-assisted work
+├── DESIGN.md                          # Design system
+├── docs/HANDOVER.md                   # Current status and pending work
 └── README.md                          # ← You are here
 ```
 
@@ -191,6 +199,11 @@ npm install
 
 # 3. Start the dev server
 npm run dev
+
+# Tests, lint and production build
+npm test
+npm run lint
+npm run build
 ```
 
 The React app starts at `http://localhost:5173`. It automatically connects to the backend at `http://<hostname>:3000`.
@@ -338,30 +351,32 @@ Then open `http://localhost:5173` in your browser.
 
 ## Frontend Components
 
-| Component      | File                           | Responsibility                                           |
-| -------------- | ------------------------------ | -------------------------------------------------------- |
-| `App`          | `src/App.jsx`                  | Root state, feed logic, routing, modals, theme           |
-| `Navbar`       | `src/components/Navbar.jsx`    | Sticky header, branding, navigation actions              |
-| `Auth`         | `src/components/Auth.jsx`      | Login / Register card with form validation               |
-| `PostCard`     | `src/components/PostCard.jsx`  | Swipeable card with media, comments, connections         |
-| `ProfilePanel` | `src/components/ProfilePanel.jsx` | Side panel with résumé, network, edit, and posts tabs |
-| `Avatar`       | `src/components/Avatar.jsx`    | User avatar with image or initial fallback               |
+| Route / component | File | Responsibility |
+| --- | --- | --- |
+| `/` | `src/pages/Landing.jsx` | Marketing page with a live sample swipe deck |
+| `/login`, `/signup` | `src/pages/Login.jsx`, `Signup.jsx` | Auth forms; login returns you to the page that asked |
+| `/feed` | `src/pages/Feed.jsx` | Swipe deck, comments, delete, share |
+| `/people` | `src/pages/People.jsx` | Searchable directory with connect buttons |
+| `/network` | `src/pages/Network.jsx` | Connections, invitations and sent requests |
+| `/u/:username` | `src/pages/Profile.jsx` | Profile header, résumé, posts, PDF export |
+| `/settings` | `src/pages/Settings.jsx` | Photo, account, résumé editor, theme, logout |
+| `AppShell` | `src/components/layout/AppShell.jsx` | Rails, mobile tab bar, account menu, composer |
+| `SwipeDeck` | `src/components/feed/SwipeDeck.jsx` | Drag/keyboard/button swiping with Motion |
+| `SessionProvider` | `src/context/SessionProvider.jsx` | Token, user, profiles, requests, posts |
 
 ---
 
 ## Design System
 
-PU-Bay uses a custom **editorial / neo-brutalist** aesthetic:
+Nexora uses a **Mono + Signal** system: the interface stays neutral so people's posts carry the colour.
 
-- **Bold, offset shadows** on all cards and buttons
-- **Strong black borders** for clear component separation
-- **Warm, earthy tones** — cream paper, burnt orange accent, golden butter
-- **Bricolage Grotesque** for headings — tight letter-spacing, heavy weight
-- **Hanken Grotesk** for body text — clean and highly legible
-- **Micro-animations** — press effects, lift hovers, rise entries, float loops
-- **Dot-grid background** — subtle, editorial-style pattern
+- **Zinc neutrals** with a single **hot coral (`#FF5A36`)** accent for likes, active states, focus and the logo
+- **Geist** for UI and headings, **Geist Mono** for handles, counts and timestamps
+- **Pill buttons**, 16px cards, 1px hairline borders, shadows only where something floats
+- **One signature motion**: the spring-physics swipe deck; everything else is short fades
+- **Light, dark and system** themes, `prefers-reduced-motion` respected
 
-Both light and dark themes maintain the same bold aesthetic while adapting colours for readability.
+Full rules, contrast notes and copy guidelines: [`DESIGN.md`](DESIGN.md).
 
 ---
 

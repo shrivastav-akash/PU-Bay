@@ -18,4 +18,12 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
   },
+  {
+    // shadcn/ui output: kept as generated so `shadcn add --diff` stays clean.
+    files: ['src/components/ui/**'],
+    rules: {
+      'no-unused-vars': 'off',
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ])
