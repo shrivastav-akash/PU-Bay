@@ -47,10 +47,10 @@ src/
 ├── main.jsx                # ThemeProvider, BrowserRouter, Tooltip, Session, Toaster
 ├── index.css               # Tailwind, shadcn tokens, Nexora coral, fonts
 ├── context/
-│   ├── SessionProvider.jsx # Token state; data layer remounts per token
+│   ├── SessionProvider.jsx # Session status from the API; data layer remounts per session
 │   └── session.js          # useAuth(), useData()
 ├── lib/
-│   ├── api.js              # fetch wrapper, token storage, mediaUrl()
+│   ├── api.js              # fetch wrapper (cookies), downloadFile(), mediaUrl()
 │   ├── connections.js      # connection status / suggestions logic
 │   ├── format.js           # timeAgo, fmtDate, initials, isVideo
 │   ├── swipe.js            # swipe commit decision
@@ -68,10 +68,10 @@ src/
 
 ## How data flows
 
-- `SessionProvider` holds the JWT (localStorage key `token`). Everything that depends on the signed-in user lives in a `DataProvider` keyed by the token, so signing in or out resets all state.
+- The session is an httpOnly cookie the page can't read. `api()` sends every request with `credentials: 'include'`, and `SessionProvider` learns who is signed in from `/get_user_and_profile` (`checking` / `authenticated` / `anonymous` / `error`). Login, logout and expiry remount the `DataProvider`, so no state from the previous account survives.
 - Shared resources (`me`, `profiles`, `requests`, `posts`) load once through `useLoader` and expose `status` (`loading` / `ready` / `error`), `reload()` and `setData()`.
 - Likes are optimistic and roll back on failure. Connection actions and posting reload the affected resource.
-- `api()` throws an `Error` carrying the server's `message` and HTTP `status`; a 401 on the current user ends the session.
+- `api()` throws an `Error` carrying the server's `message`, `code` and HTTP `status`. A `401 UNAUTHENTICATED` on any request while signed in ends the session and sends you to `/login`, which returns you to the page afterwards.
 
 ## Adding UI
 

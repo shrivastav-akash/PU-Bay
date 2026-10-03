@@ -1,10 +1,10 @@
 import fs from "fs";
 import path from "path";
 import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
 import PDFDocument from "pdfkit";
 import { env } from "../config/env.js";
 import { HttpError } from "../lib/http-error.js";
+import { endSession, startSession } from "../lib/session.js";
 import { removeUpload } from "../lib/uploads.js";
 import ConnectionRequest from "../models/connections.model.js";
 import Profile from "../models/profile.model.js";
@@ -45,8 +45,15 @@ export const login = async (req, res) => {
   if (!user || !matches) {
     throw new HttpError(401, "INVALID_CREDENTIALS", "Invalid email or password");
   }
-  const token = jwt.sign({ userId: user._id }, env.JWT_SECRET, { expiresIn: "7d" });
-  res.status(200).json({ success: true, data: { message: "login successful", token } });
+  // The token goes only into the httpOnly cookie, never into the response body.
+  startSession(res, user._id);
+  res.status(200).json({ success: true, message: "login successful" });
+};
+
+// Public: clearing the cookie must work even when the session already expired.
+export const logout = (req, res) => {
+  endSession(res);
+  res.status(200).json({ success: true, message: "logged out" });
 };
 
 export const uploadProfilePicture = async (req, res) => {

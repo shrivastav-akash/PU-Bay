@@ -24,9 +24,10 @@ export default function Login() {
     setError('');
     setBusy(true);
     try {
-      const { token } = await api('/login', { method: 'POST', body: { email: email.trim(), password } });
-      // The route guard sends us on to the page that required sign-in.
-      login(token);
+      // Sets the httpOnly session cookie; the route guard then sends us on
+      // to the page that required sign-in.
+      await api('/login', { method: 'POST', body: { email: email.trim(), password } });
+      login();
       toast.success('Welcome back');
     } catch (err) {
       setError(err.message);

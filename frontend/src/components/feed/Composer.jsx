@@ -26,7 +26,7 @@ export default function Composer({ open, onOpenChange }) {
 }
 
 function ComposerForm({ onDone }) {
-  const { token, me, posts, setFeedIndex } = useData();
+  const { me, posts, setFeedIndex } = useData();
   const navigate = useNavigate();
   const fileRef = useRef(null);
   const [body, setBody] = useState('');
@@ -50,7 +50,7 @@ function ComposerForm({ onDone }) {
     form.append('body', body.trim());
     if (media) form.append('media', media.file);
     try {
-      await api('/post', { method: 'POST', form, token });
+      await api('/post', { method: 'POST', form });
       await posts.reload();
       setFeedIndex(0);
       toast.success('Posted to the feed');

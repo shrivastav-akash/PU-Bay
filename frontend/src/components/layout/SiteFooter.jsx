@@ -6,7 +6,7 @@ import { Item, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } f
 import { Logo } from '@/components/brand/Logo';
 
 const PRIVACY = [
-  ['Secure authentication', 'Passwords are hashed with bcrypt and never stored in plain text. Sessions use temporary tokens.'],
+  ['Secure authentication', 'Passwords are hashed with bcrypt and never stored in plain text. Sessions live in secure cookies that page scripts cannot read.'],
   ['Data you control', 'We only store what you submit: profile, posts, comments and connections. No location or behavioural tracking.'],
   ['Yours to remove', 'Edit your profile or delete posts anytime. We never sell your data.'],
 ];

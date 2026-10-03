@@ -48,7 +48,7 @@ export default function Settings() {
 }
 
 function PhotoCard({ user }) {
-  const { token, me, profiles } = useData();
+  const { me, profiles } = useData();
   const input = useRef(null);
   const [busy, setBusy] = useState(false);
 
@@ -60,7 +60,7 @@ function PhotoCard({ user }) {
     const form = new FormData();
     form.append('profile_picture', file);
     try {
-      await api('/update_profile_picture', { method: 'POST', form, token });
+      await api('/update_profile_picture', { method: 'POST', form });
       await Promise.all([me.reload(), profiles.reload()]);
       toast.success('Photo updated');
     } catch (err) {
@@ -92,7 +92,7 @@ const blankWork = { company: '', position: '', years: '' };
 const blankEdu = { school: '', degree: '', fieldOfStudy: '' };
 
 function ProfileForm({ user, profile }) {
-  const { token, me, profiles } = useData();
+  const { me, profiles } = useData();
   const [account, setAccount] = useState({ name: user.name || '', username: user.username || '', email: user.email || '' });
   const [about, setAbout] = useState({ currentPost: profile?.currentPost || '', bio: profile?.bio || '' });
   const [work, setWork] = useState(profile?.pastWork || []);
@@ -103,8 +103,8 @@ function ProfileForm({ user, profile }) {
     e.preventDefault();
     setSaving(true);
     try {
-      await api('/user_update', { method: 'POST', body: account, token });
-      await api('/update_profile_data', { method: 'POST', body: { ...about, pastWork: work, education }, token });
+      await api('/user_update', { method: 'POST', body: account });
+      await api('/update_profile_data', { method: 'POST', body: { ...about, pastWork: work, education } });
       await Promise.all([me.reload(), profiles.reload()]);
       toast.success('Profile saved');
     } catch (err) {

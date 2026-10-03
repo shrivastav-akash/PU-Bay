@@ -154,14 +154,12 @@ function ResumeSection({ icon: Icon, title, items = [], render, empty }) {
 }
 
 function ResumeButton({ profileId, username }) {
-  const { token } = useData();
   const [busy, setBusy] = useState(false);
 
   const download = async () => {
     setBusy(true);
     try {
       await downloadFile(`/user/download_resume?id=${encodeURIComponent(profileId)}`, {
-        token,
         filename: `${username}-resume.pdf`,
       });
     } catch (err) {

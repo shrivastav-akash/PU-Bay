@@ -13,6 +13,7 @@ export default defineConfig({
       JWT_SECRET: "test-only-secret-that-is-at-least-32-characters",
       UPLOAD_DIR: path.join(os.tmpdir(), "nexora-test-uploads"),
       AUTH_RATE_LIMIT: "1000",
+      CLIENT_ORIGIN: "http://localhost:5173",
     },
   },
 });

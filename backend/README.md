@@ -47,10 +47,12 @@ backend/
 │   └── user.controller.js     # Auth, profile, connections, résumé PDF
 ├── lib/
 │   ├── http-error.js          # HttpError(status, code, message)
+│   ├── session.js             # Session cookie: start, end, read
 │   └── uploads.js             # Multer configs, removeUpload()
 ├── middleware/
 │   ├── auth.js                # JWT verification
 │   ├── error.js               # 404 + the single error handler
+│   ├── origin.js              # CSRF: Origin allowlist on unsafe methods
 │   ├── rate-limit.js          # Auth brute-force limiter
 │   └── validate.js            # Strict Zod parsing into req.valid
 ├── models/                    # User, Profile, Post, Comment, ConnectionRequest
@@ -84,9 +86,10 @@ Empty values fall back to the defaults.
 | Variable          | Required | Default                                         | Description |
 | ----------------- | -------- | ----------------------------------------------- | ----------- |
 | `MONGO_URI`       | yes      |                                                 | MongoDB connection string |
+| `NODE_ENV`        | no       | `development`                                   | `production` marks the session cookie `Secure` (HTTPS only) |
 | `JWT_SECRET`      | yes      |                                                 | At least 32 characters |
 | `PORT`            | no       | `3000`                                          | Listen port |
-| `CLIENT_ORIGIN`   | no       | `http://localhost:5173,http://127.0.0.1:5173`   | Comma-separated origins allowed by CORS. Add your LAN URL to test on a phone. |
+| `CLIENT_ORIGIN`   | no       | `http://localhost:5173,http://127.0.0.1:5173`   | Comma-separated origins allowed by CORS (with credentials) and by the CSRF origin check. Add your LAN URL to test on a phone. |
 | `UPLOAD_DIR`      | no       | `backend/uploads`                               | Where uploads are stored and served from |
 | `AUTH_RATE_LIMIT` | no       | `20`                                            | Login/register attempts per IP per 15 minutes |
 
@@ -110,7 +113,7 @@ Every error, from any route, has one shape and never includes stack traces:
 | ------ | ----- |
 | 400 | `VALIDATION_ERROR`, `INVALID_JSON`, `EMPTY_POST`, `FILE_REQUIRED`, `UNSUPPORTED_FILE`, `UPLOAD_ERROR`, `INVALID_REQUEST` |
 | 401 | `UNAUTHENTICATED`, `INVALID_CREDENTIALS` |
-| 403 | `FORBIDDEN` |
+| 403 | `FORBIDDEN`, `FORBIDDEN_ORIGIN` |
 | 404 | `NOT_FOUND` |
 | 409 | `ACCOUNT_EXISTS`, `REQUEST_EXISTS`, `ALREADY_CONNECTED`, `ALREADY_RESPONDED`, `CONFLICT` |
 | 413 | `FILE_TOO_LARGE`, `PAYLOAD_TOO_LARGE` |
@@ -123,14 +126,15 @@ All bodies and query strings are validated with **strict** schemas (`schemas.js`
 
 ## API Reference
 
-🔒 = requires `Authorization: Bearer <token>`.
+🔒 = requires the `nexora_session` cookie set by `/login`. Browsers send it automatically when the frontend calls `fetch(..., { credentials: 'include' })`.
 
 ### Authentication
 
 | Endpoint | Body | Success | Notes |
 | --- | --- | --- | --- |
 | `POST /register` | `name`, `username` (3–30 of `A-Z a-z 0-9 _ .`), `email`, `password` (8–72) | `201` | `409 ACCOUNT_EXISTS` if the email or username is taken. Rate limited. |
-| `POST /login` | `email`, `password` | `200`, `data.token` (JWT, 7 days) | Same `401 INVALID_CREDENTIALS` for an unknown email or a wrong password. Rate limited. |
+| `POST /login` | `email`, `password` | `200` + `Set-Cookie: nexora_session` (httpOnly, SameSite=Lax, 7 days; Secure in production) | The token is never in the response body. Same `401 INVALID_CREDENTIALS` for an unknown email or a wrong password. Rate limited. |
+| `POST /logout` | | `200`, clears the cookie | Works without a session. |
 
 ### User and profile
 
@@ -191,8 +195,10 @@ All bodies and query strings are validated with **strict** schemas (`schemas.js`
 - Strict Zod validation on every input, plus Mongoose `sanitizeFilter` as a second layer against operator injection.
 - `/login` and `/register` are rate limited per IP.
 - CORS only allows `CLIENT_ORIGIN`.
-- JWTs are verified with HS256 only and read only from the `Authorization` header.
-- Known gap: the frontend keeps the JWT in `localStorage`. Moving to httpOnly cookies is deferred.
+- The JWT lives only in an httpOnly cookie (`nexora_session`), so page scripts, and anything injected into the page, can't read it. It is verified with HS256 only. `Authorization` headers are ignored.
+- CSRF: the cookie is `SameSite=Lax` (not sent on cross-site POSTs), and every non-GET request whose `Origin` isn't in `CLIENT_ORIGIN` gets `403 FORBIDDEN_ORIGIN`.
+- `Secure` is set when `NODE_ENV=production`, so serve the API over HTTPS there.
+- Logout clears the cookie. JWTs are stateless, so a copied token stays valid until it expires (7 days); add a denylist or token version if revocation is ever needed.
 
 ---
 

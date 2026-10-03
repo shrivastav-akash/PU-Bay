@@ -12,8 +12,8 @@ Campus social network for Presidency University students: a swipe-card feed, ré
 ## Frontend map
 
 - `src/App.jsx`: routes and auth guards. `/`, `/login`, `/signup` are public-only; `/feed`, `/people`, `/network`, `/u/:username`, `/settings` need a token.
-- `src/context/`: `SessionProvider.jsx` (token + data layer keyed by token), `session.js` (`useAuth`, `useData`).
-- `src/lib/`: `api.js` (fetch wrapper, `mediaUrl`), `connections.js` (request status logic), `format.js`, `swipe.js`, `use-loader.js`.
+- `src/context/`: `SessionProvider.jsx` (session status from the API, data layer remounted on login/logout/expiry), `session.js` (`useAuth`, `useData`).
+- `src/lib/`: `api.js` (fetch wrapper with `credentials: 'include'`, `downloadFile`, `mediaUrl`), `connections.js` (request status logic), `format.js`, `swipe.js`, `use-loader.js`.
 - `src/components/`: `layout/` (AppShell, RightRail, AuthLayout, SiteFooter), `feed/` (SwipeDeck, PostCard, CommentsPanel, Composer), `people/ConnectButton.jsx`, `brand/Logo.jsx`.
 - `src/pages/`: one file per route.
 
@@ -23,6 +23,7 @@ Campus social network for Presidency University students: a swipe-card feed, ré
 - Every route: `authMiddleware` (if protected) → multer (if upload) → `validate({ body|query: schema })` from `schemas.js` → controller. Controllers read only `req.valid.*`.
 - Controllers throw `HttpError(status, code, message)`; `middleware/error.js` is the only place that writes error responses: `{ error: { code, message } }`. No try/catch in handlers (Express 5 forwards rejections).
 - `mongoose.set('sanitizeFilter', true)`: intentional query operators need `mongoose.trusted(...)`.
+- Auth is an httpOnly `nexora_session` cookie (`lib/session.js`); no Bearer headers, no token in responses or `localStorage`. Non-GET requests from origins outside `CLIENT_ORIGIN` get 403 (`middleware/origin.js`).
 
 ## Rules for this project
 

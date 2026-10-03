@@ -49,6 +49,17 @@ describe("login", () => {
     expect(errorOf(wrong)).toEqual(errorOf(unknown));
   });
 
+  it("sets an httpOnly SameSite=Lax session cookie and never returns the token", async () => {
+    const { creds } = await signUp();
+    const res = await request(app).post("/login").send({ email: creds.email, password: creds.password }).expect(200);
+    const cookie = [res.headers["set-cookie"]].flat().find((c) => c.startsWith("nexora_session="));
+    expect(cookie).toMatch(/HttpOnly/);
+    expect(cookie).toMatch(/SameSite=Lax/);
+    expect(cookie).toMatch(/Path=\//);
+    expect(cookie).toMatch(/Max-Age=604800/);
+    expect(JSON.stringify(res.body)).not.toMatch(/eyJ/); // no JWT anywhere in the body
+  });
+
   it("refuses query operators in place of values", async () => {
     await request(app).post("/login").send({ email: { $ne: null }, password: "x" }).expect(400);
   });
@@ -61,10 +72,50 @@ describe("current user", () => {
     expect(profile.userId).not.toHaveProperty("password");
   });
 
-  it("requires a valid token", async () => {
+  it("requires a valid session cookie", async () => {
     const none = await request(app).get("/get_user_and_profile").expect(401);
     expect(errorOf(none).code).toBe("UNAUTHENTICATED");
-    await request(app).get("/get_user_and_profile").set("Authorization", "Bearer not-a-jwt").expect(401);
+    await request(app).get("/get_user_and_profile").set("Cookie", "nexora_session=not-a-jwt").expect(401);
+  });
+
+  it("no longer accepts the token as a Bearer header", async () => {
+    const { auth } = await signUp();
+    const jwt = auth.Cookie.split("=")[1];
+    await request(app).get("/get_user_and_profile").set("Authorization", `Bearer ${jwt}`).expect(401);
+  });
+});
+
+describe("logout", () => {
+  it("clears the session cookie, even without a session", async () => {
+    const res = await request(app).post("/logout").expect(200);
+    const cookie = [res.headers["set-cookie"]].flat().find((c) => c.startsWith("nexora_session="));
+    expect(cookie).toMatch(/^nexora_session=;/);
+    expect(cookie).toMatch(/Expires=Thu, 01 Jan 1970/);
+    expect(cookie).toMatch(/HttpOnly/);
+  });
+});
+
+describe("cross-origin protection", () => {
+  it("rejects state-changing requests from other origins", async () => {
+    const { auth } = await signUp();
+    const res = await request(app)
+      .post("/user_update")
+      .set(auth)
+      .set("Origin", "http://evil.test")
+      .send({ name: "Hacked" })
+      .expect(403);
+    expect(errorOf(res).code).toBe("FORBIDDEN_ORIGIN");
+    await request(app).post("/user_update").set(auth).set("Origin", "http://localhost:5173").send({ name: "Fine" }).expect(200);
+  });
+
+  it("lets the app origin send credentials, and nobody else", async () => {
+    const preflight = (origin) =>
+      request(app).options("/login").set("Origin", origin).set("Access-Control-Request-Method", "POST");
+    const ok = await preflight("http://localhost:5173");
+    expect(ok.headers["access-control-allow-origin"]).toBe("http://localhost:5173");
+    expect(ok.headers["access-control-allow-credentials"]).toBe("true");
+    const evil = await preflight("http://evil.test");
+    expect(evil.headers["access-control-allow-origin"]).toBeUndefined();
   });
 });
 

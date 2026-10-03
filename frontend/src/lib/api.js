@@ -2,31 +2,37 @@
 // build works on localhost and on a LAN IP during development.
 export const API_BASE_URL = `http://${window.location.hostname}:3000`;
 
-const TOKEN_KEY = 'token';
+// The session lives in an httpOnly cookie that page scripts can't read, so
+// every request is sent with credentials and the API decides who we are.
 
-export function readToken() {
-  try {
-    return localStorage.getItem(TOKEN_KEY) || '';
-  } catch {
-    return '';
-  }
+// Called when a signed-in session is rejected (expired or revoked).
+let onSessionExpired = null;
+export function setSessionExpiredHandler(fn) {
+  onSessionExpired = fn;
 }
 
-export function writeToken(token) {
+function failure(res, json) {
+  // INVALID_CREDENTIALS is a wrong password, not a lost session.
+  if (res.status === 401 && json?.error?.code === 'UNAUTHENTICATED') onSessionExpired?.();
+  return Object.assign(new Error(json?.error?.message || `Request failed (${res.status})`), {
+    status: res.status,
+    code: json?.error?.code,
+  });
+}
+
+async function send(path, init) {
   try {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
+    return await fetch(`${API_BASE_URL}${path}`, { ...init, credentials: 'include' });
   } catch {
-    // Storage blocked (private mode): the session just won't survive a reload.
+    throw Object.assign(new Error('Could not reach the server. Check your connection.'), { status: 0 });
   }
 }
 
 // Success responses are { success, message?, data? }; errors are
 // { error: { code, message } }. Callers get `data` back, or an Error carrying
 // the server message, error code and HTTP status.
-export async function api(path, { method = 'GET', body, form, token } = {}) {
+export async function api(path, { method = 'GET', body, form } = {}) {
   const headers = {};
-  if (token) headers.Authorization = `Bearer ${token}`;
   let payload;
   if (form) {
     payload = form;
@@ -35,40 +41,21 @@ export async function api(path, { method = 'GET', body, form, token } = {}) {
     payload = JSON.stringify(body);
   }
 
-  let res;
-  try {
-    res = await fetch(`${API_BASE_URL}${path}`, { method, headers, body: payload });
-  } catch {
-    throw Object.assign(new Error('Could not reach the server. Check your connection.'), { status: 0 });
-  }
-
+  const res = await send(path, { method, headers, body: payload });
   let json = null;
   try {
     json = await res.json();
   } catch {
     // Non-JSON error page; fall through to the generic message.
   }
-  if (!res.ok) {
-    throw Object.assign(new Error(json?.error?.message || `Request failed (${res.status})`), {
-      status: res.status,
-      code: json?.error?.code,
-    });
-  }
+  if (!res.ok) throw failure(res, json);
   return json.data ?? json;
 }
 
 // For endpoints that stream a file (the résumé PDF): saves it via a temporary link.
-export async function downloadFile(path, { token, filename }) {
-  let res;
-  try {
-    res = await fetch(`${API_BASE_URL}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-  } catch {
-    throw Object.assign(new Error('Could not reach the server. Check your connection.'), { status: 0 });
-  }
-  if (!res.ok) {
-    const json = await res.json().catch(() => null);
-    throw Object.assign(new Error(json?.error?.message || `Request failed (${res.status})`), { status: res.status });
-  }
+export async function downloadFile(path, { filename }) {
+  const res = await send(path, {});
+  if (!res.ok) throw failure(res, await res.json().catch(() => null));
   const url = URL.createObjectURL(await res.blob());
   const link = Object.assign(document.createElement('a'), { href: url, download: filename });
   link.click();

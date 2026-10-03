@@ -65,7 +65,7 @@ Nexora solves a common problem on university campuses: students lack a dedicated
 | 👥 **People directory**         | Searchable people page plus "People you may know" suggestions            |
 | 🌓 **Dark / Light / System**    | Follows the device by default, no flash on load                           |
 | 📱 **Fully responsive**         | Bottom tab bar on phones, icon rail on tablets, full rails on desktop      |
-| 🔐 **Secure authentication**    | bcrypt password hashing + JWT tokens in Authorization headers              |
+| 🔐 **Secure authentication**    | bcrypt hashing, JWT in an httpOnly SameSite cookie, CSRF origin check      |
 | 🎨 **Modern design system**     | Tailwind v4 + shadcn/ui tokens, documented in `DESIGN.md`                  |
 | 🔔 **Toast notifications**      | Ephemeral feedback messages for user actions                               |
 | 📸 **Profile picture upload**   | Custom avatar with camera-icon upload overlay                              |
@@ -233,7 +233,7 @@ Then open `http://localhost:5173` in your browser.
 ```
 ┌─────────────────────┐        HTTP / JSON         ┌─────────────────────┐
 │                     │ ◄──────────────────────────► │                     │
-│   React Frontend    │    Authorization: Bearer     │   Express Backend   │
+│   React Frontend    │    httpOnly session cookie   │   Express Backend   │
 │   (Vite · :5173)    │    multipart/form-data       │   (Node.js · :3000) │
 │                     │                              │                     │
 └─────────────────────┘                              └──────────┬──────────┘
@@ -269,13 +269,16 @@ Then open `http://localhost:5173` in your browser.
     │ ─────────────────────────────►│                               │
     │                               │  bcrypt.compare()             │
     │                               │  jwt.sign({userId}, 7d)       │
-    │  200 {token: "<jwt>"}         │                               │
+    │  200 + Set-Cookie:            │                               │
+    │  nexora_session (httpOnly,    │                               │
+    │  SameSite=Lax, 7 days)        │                               │
     │ ◄─────────────────────────────│                               │
     │                               │                               │
     │  GET /get_user_and_profile    │                               │
-    │  Authorization: Bearer <jwt>  │                               │
+    │  (cookie sent automatically,  │                               │
+    │   fetch credentials:include)  │                               │
     │ ─────────────────────────────►│                               │
-    │                               │  authMiddleware: verify JWT   │
+    │                               │  authMiddleware: verify cookie│
     │                               │  req.userId = payload.userId  │
     │  200 {user, profile}          │  Fetch user + profile ───────►│
     │ ◄─────────────────────────────│                               │
@@ -302,7 +305,7 @@ Then open `http://localhost:5173` in your browser.
 | `GET`  | `/get_all_posts`          | Fetch all posts (feed)             |
 | `GET`  | `/get_comment?postId=<id>`| Fetch comments for a post          |
 
-### Authenticated Endpoints (🔒 Bearer token required)
+### Authenticated Endpoints (🔒 session cookie required)
 
 | Method | Endpoint                              | Description                            |
 | ------ | ------------------------------------- | -------------------------------------- |

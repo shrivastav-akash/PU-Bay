@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   register,
   login,
+  logout,
   uploadProfilePicture,
   updateUserProfile,
   getUserAndProfile,
@@ -32,6 +33,7 @@ const router = Router();
 // Public
 router.route("/register").post(authLimiter, validate({ body: registerBody }), register);
 router.route("/login").post(authLimiter, validate({ body: loginBody }), login);
+router.route("/logout").post(logout);
 
 // Authenticated
 router

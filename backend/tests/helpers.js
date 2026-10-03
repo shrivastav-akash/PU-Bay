@@ -12,7 +12,14 @@ export const PNG = Buffer.from(
 
 let count = 0;
 
-// Registers and logs in a fresh user. Returns the token, an auth header and
+// Pulls the session cookie out of a login response as a request header.
+export function sessionHeader(res) {
+  const cookie = [res.headers["set-cookie"] ?? []].flat().find((c) => c.startsWith("nexora_session="));
+  if (!cookie) throw new Error("login did not set the session cookie");
+  return { Cookie: cookie.split(";")[0] };
+}
+
+// Registers and logs in a fresh user. Returns the session cookie header and
 // the user/profile as the API reports them.
 export async function signUp(overrides = {}) {
   count += 1;
@@ -29,7 +36,7 @@ export async function signUp(overrides = {}) {
     .post("/login")
     .send({ email: creds.email, password: creds.password })
     .expect(200);
-  const auth = { Authorization: `Bearer ${login.body.data.token}` };
+  const auth = sessionHeader(login);
   const me = await request(app).get("/get_user_and_profile").set(auth).expect(200);
   return { creds, auth, user: me.body.data.user, profile: me.body.data.profile };
 }

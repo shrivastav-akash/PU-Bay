@@ -8,6 +8,8 @@ dotenv.config({ quiet: true });
 const DEFAULT_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173";
 
 const schema = z.object({
+  // "production" turns on the Secure flag for the session cookie (HTTPS only).
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(3000),
   MONGO_URI: z.string({ error: "MONGO_URI is required" }).min(1),
   JWT_SECRET: z

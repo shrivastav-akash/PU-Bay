@@ -1,13 +1,13 @@
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import { HttpError } from "../lib/http-error.js";
+import { readSession } from "../lib/session.js";
 
-// Central authentication: verifies a JWT from the Authorization header and
-// attaches the authenticated user id to req.userId. Tokens are never read from
-// the request body or query string (they would leak into logs/history).
+// Central authentication: verifies the JWT in the httpOnly session cookie and
+// attaches the authenticated user id to req.userId. Headers, bodies and query
+// strings are never accepted as a source of credentials.
 const authMiddleware = (req, res, next) => {
-  const header = req.headers.authorization || "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  const token = readSession(req);
   if (!token) {
     return next(new HttpError(401, "UNAUTHENTICATED", "Authentication required"));
   }
@@ -16,7 +16,7 @@ const authMiddleware = (req, res, next) => {
     req.userId = payload.userId;
     next();
   } catch {
-    next(new HttpError(401, "UNAUTHENTICATED", "Invalid or expired token"));
+    next(new HttpError(401, "UNAUTHENTICATED", "Invalid or expired session"));
   }
 };
 

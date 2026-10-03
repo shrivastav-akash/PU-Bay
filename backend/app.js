@@ -3,6 +3,7 @@ import express from "express";
 import mongoose from "mongoose";
 import { env } from "./config/env.js";
 import { errorHandler, notFound } from "./middleware/error.js";
+import { checkOrigin } from "./middleware/origin.js";
 import postRoutes from "./routes/posts.routes.js";
 import userRoutes from "./routes/user.routes.js";
 
@@ -13,7 +14,9 @@ mongoose.set("sanitizeFilter", true);
 
 const app = express();
 
-app.use(cors({ origin: env.CLIENT_ORIGIN }));
+// credentials: the session cookie travels with requests from the allowed origins only.
+app.use(cors({ origin: env.CLIENT_ORIGIN, credentials: true }));
+app.use(checkOrigin);
 app.use(express.json());
 
 app.use(userRoutes);

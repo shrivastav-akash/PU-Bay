@@ -22,7 +22,7 @@ const STAGE = 'h-[clamp(360px,calc(100dvh-390px),560px)] md:h-[clamp(420px,calc(
 
 export default function Feed() {
   const { openComposer } = useOutletContext();
-  const { token, meId, posts, profileByUserId, feedIndex, setFeedIndex, setLike } = useData();
+  const { meId, posts, profileByUserId, feedIndex, setFeedIndex, setLike } = useData();
   const [comments, setComments] = useState({ open: false, post: null });
   const [toDelete, setToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -46,7 +46,7 @@ export default function Feed() {
   const confirmDelete = async () => {
     setDeleting(true);
     try {
-      await api('/delete_post', { method: 'POST', body: { postId: toDelete._id }, token });
+      await api('/delete_post', { method: 'POST', body: { postId: toDelete._id } });
       // The index now points at the post after the deleted one.
       await posts.reload();
       toast.success('Post deleted');
