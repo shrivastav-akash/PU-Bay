@@ -1,7 +1,11 @@
 import fs from "fs";
 import path from "path";
+import jwt from "jsonwebtoken";
 import { describe, expect, it, vi } from "vitest";
-import { app, PNG, request, signUp, uploadedFiles } from "./helpers.js";
+import RevokedToken from "../models/revokedToken.model.js";
+import Profile from "../models/profile.model.js";
+import User from "../models/user.model.js";
+import { app, PNG, request, sessionHeader, signUp, uploadedFiles } from "./helpers.js";
 
 const errorOf = (res) => res.body.error;
 
@@ -92,6 +96,87 @@ describe("logout", () => {
     expect(cookie).toMatch(/^nexora_session=;/);
     expect(cookie).toMatch(/Expires=Thu, 01 Jan 1970/);
     expect(cookie).toMatch(/HttpOnly/);
+  });
+
+  it("revokes the token, so a copied cookie stops working", async () => {
+    const { auth } = await signUp();
+    await request(app).post("/logout").set(auth).expect(200);
+    const reused = await request(app).get("/get_user_and_profile").set(auth).expect(401);
+    expect(errorOf(reused).code).toBe("UNAUTHENTICATED");
+  });
+
+  it("only ends the session it was called from", async () => {
+    const { auth: laptop, creds } = await signUp();
+    const phone = sessionHeader(
+      await request(app).post("/login").send({ email: creds.email, password: creds.password }).expect(200),
+    );
+    await request(app).post("/logout").set(laptop).expect(200);
+    await request(app).get("/get_user_and_profile").set(laptop).expect(401);
+    await request(app).get("/get_user_and_profile").set(phone).expect(200);
+  });
+
+  it("keeps a revocation only as long as the token would have lived", async () => {
+    const { auth } = await signUp();
+    const { jti, exp } = jwt.decode(auth.Cookie.split("=")[1]);
+    await request(app).post("/logout").set(auth).expect(200);
+    await request(app).post("/logout").set(auth).expect(200); // repeat is harmless
+
+    const entries = await RevokedToken.find({ jti });
+    expect(entries).toHaveLength(1);
+    expect(entries[0].expiresAt.getTime()).toBe(exp * 1000);
+
+    await RevokedToken.init();
+    const ttl = (await RevokedToken.collection.indexes()).find((i) => i.key.expiresAt === 1);
+    expect(ttl.expireAfterSeconds).toBe(0);
+  });
+
+  it("ignores a garbage cookie", async () => {
+    await request(app).post("/logout").set("Cookie", "nexora_session=garbage").expect(200);
+  });
+
+  it("refuses tokens issued without a jti, which can't be revoked", async () => {
+    const { user } = await signUp();
+    const legacy = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+    await request(app).get("/get_user_and_profile").set("Cookie", `nexora_session=${legacy}`).expect(401);
+  });
+});
+
+describe("log out of all devices", () => {
+  const loginAgain = async (creds) =>
+    sessionHeader(await request(app).post("/login").send({ email: creds.email, password: creds.password }).expect(200));
+
+  it("ends every session of the user and leaves others alone", async () => {
+    const { auth: laptop, creds } = await signUp();
+    const phone = await loginAgain(creds);
+    const someoneElse = await signUp();
+
+    const res = await request(app).post("/logout_all").set(laptop).expect(200);
+    const cookie = [res.headers["set-cookie"]].flat().find((c) => c.startsWith("nexora_session="));
+    expect(cookie).toMatch(/^nexora_session=;/);
+
+    await request(app).get("/get_user_and_profile").set(laptop).expect(401);
+    await request(app).get("/get_user_and_profile").set(phone).expect(401);
+    await request(app).get("/get_user_and_profile").set(someoneElse.auth).expect(200);
+  });
+
+  it("lets you sign in again afterwards, and that new session works", async () => {
+    const { auth, creds } = await signUp();
+    await request(app).post("/logout_all").set(auth).expect(200);
+    const fresh = await loginAgain(creds);
+    await request(app).get("/get_user_and_profile").set(fresh).expect(200);
+  });
+
+  it("needs a session and keeps the version private", async () => {
+    await request(app).post("/logout_all").expect(401);
+    const { auth } = await signUp();
+    const me = await request(app).get("/get_user_and_profile").set(auth).expect(200);
+    expect(me.body.data.user).not.toHaveProperty("tokenVersion");
+  });
+
+  it("refuses tokens of a deleted account", async () => {
+    const { auth, user } = await signUp();
+    await Promise.all([User.deleteOne({ _id: user._id }), Profile.deleteOne({ userId: user._id })]);
+    await request(app).get("/get_user_and_profile").set(auth).expect(401);
   });
 });
 

@@ -4,7 +4,7 @@ import bcrypt from "bcrypt";
 import PDFDocument from "pdfkit";
 import { env } from "../config/env.js";
 import { HttpError } from "../lib/http-error.js";
-import { endSession, startSession } from "../lib/session.js";
+import { endAllSessions, endSession, startSession } from "../lib/session.js";
 import { removeUpload } from "../lib/uploads.js";
 import ConnectionRequest from "../models/connections.model.js";
 import Profile from "../models/profile.model.js";
@@ -39,21 +39,27 @@ export const register = async (req, res) => {
 
 export const login = async (req, res) => {
   const { email, password } = req.valid.body;
-  const user = await User.findOne({ email }).select("+password");
+  const user = await User.findOne({ email }).select("+password +tokenVersion");
   const matches = await bcrypt.compare(password, user?.password ?? DUMMY_HASH);
   // Same answer for unknown email and wrong password: accounts can't be enumerated.
   if (!user || !matches) {
     throw new HttpError(401, "INVALID_CREDENTIALS", "Invalid email or password");
   }
   // The token goes only into the httpOnly cookie, never into the response body.
-  startSession(res, user._id);
+  startSession(res, user);
   res.status(200).json({ success: true, message: "login successful" });
 };
 
 // Public: clearing the cookie must work even when the session already expired.
-export const logout = (req, res) => {
-  endSession(res);
+// A still-valid token is revoked, so a copy of it stops working too.
+export const logout = async (req, res) => {
+  await endSession(req, res);
   res.status(200).json({ success: true, message: "logged out" });
+};
+
+export const logoutAll = async (req, res) => {
+  await endAllSessions(req.userId, res);
+  res.status(200).json({ success: true, message: "logged out of all devices" });
 };
 
 export const uploadProfilePicture = async (req, res) => {

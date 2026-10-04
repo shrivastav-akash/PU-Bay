@@ -29,6 +29,13 @@ const UserSchema = new mongoose.Schema({
     type: String,
     default: "default.jpg",
   },
+  // Stamped into every session token. "Log out of all devices" increments it,
+  // which invalidates every token issued before. Missing on older users = 0.
+  tokenVersion: {
+    type: Number,
+    default: 0,
+    select: false,
+  },
   createdAt: {
     type: Date,
     default: Date.now,
@@ -41,6 +48,7 @@ const UserSchema = new mongoose.Schema({
 UserSchema.set("toJSON", {
   transform: (doc, ret) => {
     delete ret.password;
+    delete ret.tokenVersion;
     return ret;
   },
 });

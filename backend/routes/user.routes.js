@@ -3,6 +3,7 @@ import {
   register,
   login,
   logout,
+  logoutAll,
   uploadProfilePicture,
   updateUserProfile,
   getUserAndProfile,
@@ -36,6 +37,7 @@ router.route("/login").post(authLimiter, validate({ body: loginBody }), login);
 router.route("/logout").post(logout);
 
 // Authenticated
+router.route("/logout_all").post(authMiddleware, logoutAll);
 router
   .route("/update_profile_picture")
   .post(authMiddleware, avatarImage, uploadProfilePicture);

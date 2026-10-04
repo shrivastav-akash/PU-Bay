@@ -47,7 +47,7 @@ backend/
 │   └── user.controller.js     # Auth, profile, connections, résumé PDF
 ├── lib/
 │   ├── http-error.js          # HttpError(status, code, message)
-│   ├── session.js             # Session cookie: start, end, read
+│   ├── session.js             # Session cookie: start, verify, revoke one / all
 │   └── uploads.js             # Multer configs, removeUpload()
 ├── middleware/
 │   ├── auth.js                # JWT verification
@@ -55,7 +55,7 @@ backend/
 │   ├── origin.js              # CSRF: Origin allowlist on unsafe methods
 │   ├── rate-limit.js          # Auth brute-force limiter
 │   └── validate.js            # Strict Zod parsing into req.valid
-├── models/                    # User, Profile, Post, Comment, ConnectionRequest
+├── models/                    # User, Profile, Post, Comment, ConnectionRequest, RevokedToken
 ├── routes/                    # posts.routes.js, user.routes.js
 ├── schemas.js                 # Every request schema
 ├── tests/                     # Vitest + Supertest suites
@@ -134,7 +134,8 @@ All bodies and query strings are validated with **strict** schemas (`schemas.js`
 | --- | --- | --- | --- |
 | `POST /register` | `name`, `username` (3–30 of `A-Z a-z 0-9 _ .`), `email`, `password` (8–72) | `201` | `409 ACCOUNT_EXISTS` if the email or username is taken. Rate limited. |
 | `POST /login` | `email`, `password` | `200` + `Set-Cookie: nexora_session` (httpOnly, SameSite=Lax, 7 days; Secure in production) | The token is never in the response body. Same `401 INVALID_CREDENTIALS` for an unknown email or a wrong password. Rate limited. |
-| `POST /logout` | | `200`, clears the cookie | Works without a session. |
+| `POST /logout` | | `200`, clears the cookie | Revokes this session's token server-side. Works without a session. |
+| `POST /logout_all` 🔒 | | `200`, clears the cookie | Ends every session of the user on every device (bumps `tokenVersion`). |
 
 ### User and profile
 
@@ -180,11 +181,12 @@ All bodies and query strings are validated with **strict** schemas (`schemas.js`
 
 | Model | Fields |
 | --- | --- |
-| User | `name`, `username` (unique), `email` (unique), `password` (bcrypt, `select: false`), `profilePicture`, `active`, `createdAt` |
+| User | `name`, `username` (unique), `email` (unique), `password` (bcrypt, `select: false`), `profilePicture`, `active`, `tokenVersion` (`select: false`, default 0), `createdAt` |
 | Profile | `userId`, `bio`, `currentPost`, `pastWork[]`, `education[]` |
 | Post | `userId`, `body` (optional), `likes`, `likedBy[]`, `media`, `fileType` (full MIME type; older posts hold only the subtype), `active`, `createdAt` |
 | Comment | `userId`, `postId`, `body` |
 | ConnectionRequest | `userId` (sender), `connectionId` (receiver), `status_accepted` (`null` pending, `true` accepted, `false` ignored) |
+| RevokedToken | `jti` (unique), `expiresAt` (TTL index: deleted when the token would have expired) |
 
 ---
 
@@ -198,7 +200,9 @@ All bodies and query strings are validated with **strict** schemas (`schemas.js`
 - The JWT lives only in an httpOnly cookie (`nexora_session`), so page scripts, and anything injected into the page, can't read it. It is verified with HS256 only. `Authorization` headers are ignored.
 - CSRF: the cookie is `SameSite=Lax` (not sent on cross-site POSTs), and every non-GET request whose `Origin` isn't in `CLIENT_ORIGIN` gets `403 FORBIDDEN_ORIGIN`.
 - `Secure` is set when `NODE_ENV=production`, so serve the API over HTTPS there.
-- Logout clears the cookie. JWTs are stateless, so a copied token stays valid until it expires (7 days); add a denylist or token version if revocation is ever needed.
+- Logout revokes the session: each JWT carries a random `jti`, `POST /logout` records it in `revokedtokens`, and auth refuses revoked or `jti`-less tokens. A copied cookie stops working immediately. Only that device is signed out; other sessions of the same user stay valid. A TTL index removes each entry when the token would have expired, so the collection stays small.
+- Log out of all devices: every JWT also carries the user's `tokenVersion` (`ver`). `POST /logout_all` increments it, so every token issued before stops matching. Auth also refuses tokens of deleted accounts.
+- Cost: each authenticated request does two indexed lookups in parallel (denylist by `jti`, user by `_id`).
 
 ---
 

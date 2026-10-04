@@ -279,8 +279,14 @@ Then open `http://localhost:5173` in your browser.
     │   fetch credentials:include)  │                               │
     │ ─────────────────────────────►│                               │
     │                               │  authMiddleware: verify cookie│
+    │                               │  + jti not revoked ──────────►│
     │                               │  req.userId = payload.userId  │
     │  200 {user, profile}          │  Fetch user + profile ───────►│
+    │ ◄─────────────────────────────│                               │
+    │                               │                               │
+    │  POST /logout                 │                               │
+    │ ─────────────────────────────►│  store jti in revokedtokens ─►│
+    │  200 + cookie cleared         │  (TTL: until token expiry)    │
     │ ◄─────────────────────────────│                               │
 ```
 
@@ -301,7 +307,8 @@ Then open `http://localhost:5173` in your browser.
 | Method | Endpoint                  | Description                        |
 | ------ | ------------------------- | ---------------------------------- |
 | `POST` | `/register`               | Create a new account               |
-| `POST` | `/login`                  | Sign in and get a JWT              |
+| `POST` | `/login`                  | Sign in (sets the session cookie)  |
+| `POST` | `/logout`                 | Revoke this session, clear cookie  |
 | `GET`  | `/get_all_posts`          | Fetch all posts (feed)             |
 | `GET`  | `/get_comment?postId=<id>`| Fetch comments for a post          |
 
@@ -310,6 +317,7 @@ Then open `http://localhost:5173` in your browser.
 | Method | Endpoint                              | Description                            |
 | ------ | ------------------------------------- | -------------------------------------- |
 | `GET`  | `/get_user_and_profile`               | Get own user + profile                 |
+| `POST` | `/logout_all`                         | Log out of every device                |
 | `POST` | `/user_update`                        | Update account (name, email, username) |
 | `POST` | `/update_profile_data`                | Update professional profile            |
 | `POST` | `/update_profile_picture`             | Upload profile picture                 |
@@ -370,7 +378,7 @@ Errors from every endpoint share one shape: `{ "error": { "code": "...", "messag
 | `/people` | `src/pages/People.jsx` | Searchable directory with connect buttons |
 | `/network` | `src/pages/Network.jsx` | Connections, invitations and sent requests |
 | `/u/:username` | `src/pages/Profile.jsx` | Profile header, résumé, posts, PDF export |
-| `/settings` | `src/pages/Settings.jsx` | Photo, account, résumé editor, theme, logout |
+| `/settings` | `src/pages/Settings.jsx` | Photo, account, résumé editor, theme, logout / log out of all devices |
 | `AppShell` | `src/components/layout/AppShell.jsx` | Rails, mobile tab bar, account menu, composer |
 | `SwipeDeck` | `src/components/feed/SwipeDeck.jsx` | Drag/keyboard/button swiping with Motion |
 | `SessionProvider` | `src/context/SessionProvider.jsx` | Token, user, profiles, requests, posts |

@@ -28,9 +28,16 @@ export function SessionProvider({ children }) {
       renew();
     }
   }, [renew]);
+  // Unlike logout, a failure here must not look like success: other devices
+  // would still be signed in. Errors reach the caller and nothing changes.
+  const logoutEverywhere = useCallback(async () => {
+    await api('/logout_all', { method: 'POST' });
+    setSignedOut(true);
+    renew();
+  }, [renew]);
 
   return (
-    <DataProvider key={generation} signedOut={signedOut} login={login} logout={logout} expire={renew}>
+    <DataProvider key={generation} signedOut={signedOut} login={login} logout={logout} logoutEverywhere={logoutEverywhere} expire={renew}>
       {children}
     </DataProvider>
   );
@@ -44,7 +51,7 @@ function sessionStatus(me) {
   return me.error?.status === 401 ? 'anonymous' : 'error';
 }
 
-function DataProvider({ signedOut, login, logout, expire, children }) {
+function DataProvider({ signedOut, login, logout, logoutEverywhere, expire, children }) {
   // The cookie is invisible to scripts, so "who am I" is the session check.
   const loadMe = useCallback(() => api('/get_user_and_profile'), []);
   const loadProfiles = useCallback(() => api('/user/get_all_users'), []);
@@ -119,7 +126,10 @@ function DataProvider({ signedOut, login, logout, expire, children }) {
     await reloadRequests();
   }, [reloadRequests]);
 
-  const auth = useMemo(() => ({ status, signedOut, login, logout, retry: me.reload }), [status, signedOut, login, logout, me.reload]);
+  const auth = useMemo(
+    () => ({ status, signedOut, login, logout, logoutEverywhere, retry: me.reload }),
+    [status, signedOut, login, logout, logoutEverywhere, me.reload],
+  );
 
   const value = useMemo(() => ({
     meId,

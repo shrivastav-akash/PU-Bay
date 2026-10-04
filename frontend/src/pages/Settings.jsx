@@ -2,7 +2,11 @@ import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
-import { Camera, LogOut, Monitor, Moon, Plus, Sun, X } from 'lucide-react';
+import { Camera, LogOut, MonitorSmartphone, Monitor, Moon, Plus, Sun, X } from 'lucide-react';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSet, FieldLegend } from '@/components/ui/field';
@@ -262,18 +266,53 @@ function AppearanceCard() {
 }
 
 function SessionCard() {
-  const { logout } = useAuth();
+  const { logout, logoutEverywhere } = useAuth();
+  const [busy, setBusy] = useState(false);
+
+  const everywhere = async () => {
+    setBusy(true);
+    try {
+      await logoutEverywhere();
+    } catch (err) {
+      toast.error('Could not sign out other devices', { description: err.message });
+      setBusy(false);
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Session</CardTitle>
-        <CardDescription>Signs you out on this device.</CardDescription>
+        <CardTitle>Sessions</CardTitle>
+        <CardDescription>Log out here, or everywhere you're signed in if you've lost a device or used a shared computer.</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-wrap gap-2">
         <Button variant="outline" onClick={logout}>
           <LogOut data-icon="inline-start" />
           Log out
         </Button>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="destructive">
+              <MonitorSmartphone data-icon="inline-start" />
+              Log out of all devices
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Log out of all devices?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Every session ends, including this one. You'll need your password to sign in again on each device.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+              <AlertDialogAction variant="destructive" disabled={busy} onClick={(e) => { e.preventDefault(); everywhere(); }}>
+                {busy && <Spinner data-icon="inline-start" />}
+                Log out everywhere
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );

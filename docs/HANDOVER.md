@@ -1,12 +1,12 @@
 # Handover
 
-_Last updated: 2026-10-03, branch `redesign/nexora`._
+_Last updated: 2026-10-04, branch `redesign/nexora`._
 
 ## Status
 
 - Phase A (rebrand + frontend redesign): committed `1b9e2c5`.
 - Phase B (backend security and bug fixes, items 1–25): committed `caf206f`.
-- **httpOnly cookie sessions (item 26): done, uncommitted.**
+- **httpOnly cookie sessions (item 26), per-device token revocation on logout, and "log out of all devices": done, uncommitted.**
 
 ## What changed: cookie sessions
 
@@ -17,6 +17,15 @@ Backend:
 - CSRF: `middleware/origin.js` returns 403 `FORBIDDEN_ORIGIN` for non-GET requests whose `Origin` isn't in `CLIENT_ORIGIN`. CORS sends `credentials: true` for those origins only.
 - New env var `NODE_ENV` (`development` / `test` / `production`).
 
+Revocation:
+- Every JWT is signed with a random `jti`. `POST /logout` stores it in the new `revokedtokens` collection (unique `jti`, TTL index on `expiresAt` = the token's own expiry). `verifySession` refuses revoked tokens and tokens without a `jti`.
+- Only the device that logs out is affected; other sessions stay signed in.
+- One-time effect: sessions issued before this change have no `jti`, so everyone currently signed in (you included) has to log in once more.
+
+Log out of all devices:
+- `User.tokenVersion` (Number, default 0, `select: false`, stripped from JSON) is stamped into every JWT as `ver`. `POST /logout_all` increments it; `verifySession` refuses tokens whose `ver` doesn't match and tokens of deleted users.
+- Settings has a "Sessions" card with Log out plus "Log out of all devices" behind a confirmation dialog. If the request fails, you stay signed in and see an error toast.
+
 Frontend:
 - `lib/api.js`: every request uses `credentials: 'include'`; all token plumbing is removed. A 401 `UNAUTHENTICATED` while signed in triggers the session-expired handler.
 - `SessionProvider`: session status comes from `/get_user_and_profile` (`checking` / `authenticated` / `anonymous` / `error`). Login, logout and expiry remount the data layer. The old `localStorage.token` is deleted on load.
@@ -24,7 +33,7 @@ Frontend:
 
 ## Verified
 
-- Backend `npm test`: 39 passing. New tests cover:
+- Backend `npm test`: 48 passing. Log-out-everywhere tests cover: all of the user's sessions are rejected while other users are unaffected, a fresh login works afterwards, the endpoint needs a session, `tokenVersion` never appears in responses, and deleted users' tokens are refused. Dropping the version check, not loading `+tokenVersion` at login, or exposing the field makes them fail. Revocation tests cover: a copied cookie is rejected after logout, other devices stay signed in, repeat or garbage logout is harmless, the entry expires with the token (TTL index present), and tokens without a `jti` are refused. Removing the denylist insert, the lookup or the `jti` requirement makes them fail. The earlier cookie tests cover:
   - the cookie flags
   - no token in the body
   - Bearer rejected
@@ -45,7 +54,8 @@ Frontend:
 
 ## Known issues / deferred
 
-- JWTs are stateless: logout removes the cookie, but a copied token stays valid until it expires (7 days). Add a denylist or token version if revocation is needed.
+- Password or email changes don't revoke other sessions yet. `endAllSessions` would be the hook to call (there is no password-change endpoint today).
+- Browser e2e for log out everywhere: browser session and a curl "phone" session both ended; a fresh login works; API-down shows the error toast and keeps you signed in. The test users were removed.
 - In production, the API must be served over HTTPS (Secure cookie). Frontend and API must stay same-site (same registrable domain) for `SameSite=Lax`, or move to `SameSite=None; Secure` plus the existing Origin check.
 - The rate limiter uses an in-memory store (single process).
 - The frontend bundle is about 683 kB in one chunk; measure with Lighthouse before route-splitting.

@@ -23,7 +23,7 @@ Campus social network for Presidency University students: a swipe-card feed, ré
 - Every route: `authMiddleware` (if protected) → multer (if upload) → `validate({ body|query: schema })` from `schemas.js` → controller. Controllers read only `req.valid.*`.
 - Controllers throw `HttpError(status, code, message)`; `middleware/error.js` is the only place that writes error responses: `{ error: { code, message } }`. No try/catch in handlers (Express 5 forwards rejections).
 - `mongoose.set('sanitizeFilter', true)`: intentional query operators need `mongoose.trusted(...)`.
-- Auth is an httpOnly `nexora_session` cookie (`lib/session.js`); no Bearer headers, no token in responses or `localStorage`. Non-GET requests from origins outside `CLIENT_ORIGIN` get 403 (`middleware/origin.js`).
+- Auth is an httpOnly `nexora_session` cookie (`lib/session.js`); no Bearer headers, no token in responses or `localStorage`. Every JWT has a `jti` and the user's `tokenVersion` (`ver`). `/logout` adds the `jti` to the `revokedtokens` denylist (TTL-indexed); `/logout_all` increments `tokenVersion`. `verifySession` refuses revoked, `jti`-less, stale-version and deleted-user tokens. Any query that logs a user in must select `+tokenVersion`. Non-GET requests from origins outside `CLIENT_ORIGIN` get 403 (`middleware/origin.js`).
 
 ## Rules for this project
 
